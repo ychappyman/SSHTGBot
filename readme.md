@@ -42,7 +42,7 @@ VPS-Set-For-Telegram 是一个基于 Telegram 的自动化工具，主要用于�
          "username": "your_username",
          "password": "your_password",
          "hostname": "your_hostname",（ssh地址，比如s5.serv00.com）
-         "path": "optional_path"(注意最后一行此处无逗号，path这一行选填，若不设置且setpathcom已设置，会跳过path执行setcommand命令)
+         "path": "optional_path"(注意最后一行此处无逗号，path这一行选填，若不设置且setpathcom已设置，会跳过path执行setcommand默认命令)
        },
        ...
      ]
