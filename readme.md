@@ -48,7 +48,7 @@ VPS-Set-For-Telegram 是一个基于 Telegram 的自动化工具，主要用于�
      ]
      ```
    - `AUTO_CONNECT_INTERVAL`: 自动重置的时间间隔（小时），选填，默认关闭。
-   - `RENDER_APP_URL`: 您的 Render 应用 URL（格式：https://项目名称.onrender.com）
+   - `RENDER_APP_URL`: 您的 Render 应用 URL（格式：https://*******.onrender.com,项目左上角）
 
 4. 在 Render 中docker启动。
 
