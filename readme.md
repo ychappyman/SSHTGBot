@@ -1,8 +1,8 @@
-# vps-setbot-for-telegram
+# VPS-Set-For-Telegram
 
 ## 项目简介
 
-vps-setbot-for-telegram 是一个基于 Telegram 的自动化工具，主要用于远程管理和重置多个 VPS（如sevr00）。该项目允许用户通过 Telegram 机器人界面执行各种操作，包括SSH连接到VPS、执行自定义命令、设置定时任务等。
+VPS-Set-For-Telegram 是一个基于 Telegram 的自动化工具，主要用于远程管理和重置多个 VPS（如sevr00）。该项目允许用户通过 Telegram 机器人界面执行各种操作，包括SSH连接到VPS、执行自定义命令、设置定时任务等。
 
 ### 主要功能
 
