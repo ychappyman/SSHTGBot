@@ -39,12 +39,18 @@ VPS-Set-For-Telegram 是一个基于 Telegram 的自动化工具，主要用于�
      ```json
      [
        {
-         "username": "your_username",（ssh用户名）
-         "password": "your_password",（ssh密码）
-         "hostname": "your_hostname",（ssh地址，格式示例："s5.serv00.com"）
-         "path": "optional_path"(注意最后一行此处无逗号，path这一行选填，若不设置且setpathcom已设置，会跳过path执行setcommand默认命令.
+         "username": "your_username1",（ssh用户名）
+         "password": "your_password1",（ssh密码）
+         "hostname": "your_hostname1",（ssh地址，格式示例："s5.serv00.com"）
+         "path": "optional_path1"(注意最后一行此处无逗号，path这一行选填，若不设置且setpathcom已设置，会跳过path执行setcommand默认命令.
                                    格式示例："~/domains/ssgj.dns-dynamic.net/vless")
        },
+       {
+         "username": "your_username2",
+         "password": "your_password2",
+         "hostname": "your_hostname2",
+         "path": "optional_path2"
+       },     
        ...
      ]
      ```
