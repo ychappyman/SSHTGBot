@@ -10,7 +10,12 @@ vps-setbot-for-telegram 是一个基于 Telegram 的自动化工具，主要用�
 2. 支持 SSH 连接到多个 VPS
 3. 执行自定义命令或预设的重置脚本
 4. 设置自动重置计划
-5. 实时反馈执行结果
+
+## Telegram 交流群
+
+欢迎加入我们的 Telegram 交流群，在这里您可以与其他用户讨论使用心得，获取帮助，以及了解最新的项目动态：
+
+[加入 VPS Reset Bot 交流群](https://t.me/+WIX6H-944HQzZmQ9)
 
 ## 部署方法
 
