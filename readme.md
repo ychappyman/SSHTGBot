@@ -15,7 +15,7 @@ VPS-Set-For-Telegram 是一个基于 Telegram 的自动化工具，主要用于�
 
 欢迎加入我们的 Telegram 交流群，在这里您可以与其他用户讨论使用心得，获取帮助，以及了解最新的项目动态：
 
-[加入 VPS Reset Bot 交流群](https://t.me/+WIX6H-944HQzZmQ9)
+[加入 VPS-Set-For-Bot 交流群](https://t.me/+WIX6H-944HQzZmQ9)
 
 ## 部署方法
 
@@ -52,6 +52,7 @@ VPS-Set-For-Telegram 是一个基于 Telegram 的自动化工具，主要用于�
 
 4. 在 Render 中docker启动。
 
+备注：Render可以部署一个免费项目，长时间不访问会可能有50s迟缓，可以手机下载UptimeRobot免费保持活跃。
 
 ## 使用说明
 
