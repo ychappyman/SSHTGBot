@@ -26,7 +26,9 @@ AUTO_CONNECT_INTERVAL = os.getenv('AUTO_CONNECT_INTERVAL')
 RENDER_APP_URL = os.getenv('RENDER_APP_URL')
 RESET_INTERVAL_VARIATION = 10  # 默认为10分钟
 FEEDBACK_GROUP_LINK = "https://t.me/+WIX6H-944HQzZmQ9"
-CUSTOM_COMMAND = DEFAULT_COMMAND
+CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND')
+if CUSTOM_COMMAND is None or CUSTOM_COMMAND == '':
+    CUSTOM_COMMAND = DEFAULT_COMMAND
 CUSTOM_PATH_COMMAND = None
 
 vps_reset_lock = threading.Lock()
@@ -53,6 +55,7 @@ def generate_welcome_message():
         "/ssh - 列出所有可用的 VPS 用户名\n"
         "/ssh <username> - 连接到指定的 VPS\n"
         "/exit - 退出当前 SSH 会话\n"
+        "/setcommand - 查看要执行的自定义命令\n"
         "/setcommand <command> - 设置要执行的自定义命令（例如：/setcommand source ~/.profile && pm2 resurrect）\n"
         "/setpathcom [command] - 设置、查看或清除要在指定路径下执行的自定义命令\n"
         "   - 设置: /setpathcom pm2 resurrect\n"
@@ -177,7 +180,7 @@ def set_command(update: Update, context: CallbackContext) -> None:
         return
 
     if not context.args:
-        update.message.reply_text('请提供要执行的命令，例如：/setcommand source ~/.profile && pm2 resurrect')
+        update.message.reply_text(f'要执行的自定义命令为：{CUSTOM_COMMAND}')
         return
 
     CUSTOM_COMMAND = ' '.join(context.args)
