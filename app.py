@@ -77,6 +77,9 @@ def send_welcome_message_to_chat(bot):
     reply_markup = create_feedback_keyboard()
     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=welcome_message, reply_markup=reply_markup)
 
+def help_command(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text(generate_welcome_message())
+        
 def reset_vps_command(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) == TELEGRAM_CHAT_ID:
         update.message.reply_text('正在触发 VPS 重置脚本...')
@@ -241,6 +244,7 @@ def send_welcome_message(update: Update, context: CallbackContext) -> None:
 def setup_bot():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
+    dp.add_handler(CommandHandler("help", help_command))
     dp.add_handler(CommandHandler("reset", reset_vps_command))
     dp.add_handler(CommandHandler("setcron", set_cron))
     dp.add_handler(CommandHandler("getcron", get_cron))
