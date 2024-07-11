@@ -52,6 +52,7 @@ def generate_welcome_message():
         CUSTOM_COMMAND = DEFAULT_COMMAND
     return (
         "您好！以下是可用的命令：\n"
+        "/help - 再次发送此帮助消息\n"
         "/reset - 触发 VPS 重置脚本\n"
         "/setcron <小时数> - 设置自动重置的时间间隔（例如：/setcron 24）\n"
         "/getcron - 获取当前自动重置的时间间隔和下次重置时间\n"
