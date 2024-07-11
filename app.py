@@ -26,7 +26,9 @@ AUTO_CONNECT_INTERVAL = os.getenv('AUTO_CONNECT_INTERVAL')
 RENDER_APP_URL = os.getenv('RENDER_APP_URL')
 RESET_INTERVAL_VARIATION = 10  # 默认为10分钟
 FEEDBACK_GROUP_LINK = "https://t.me/+WIX6H-944HQzZmQ9"
-CUSTOM_COMMAND = DEFAULT_COMMAND
+CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND')
+if CUSTOM_COMMAND is None or CUSTOM_COMMAND == '':
+    CUSTOM_COMMAND = DEFAULT_COMMAND
 CUSTOM_PATH_COMMAND = None
 
 vps_reset_lock = threading.Lock()
@@ -44,8 +46,13 @@ def get_beijing_time(dt=None):
     return dt.astimezone(beijing_tz)
 
 def generate_welcome_message():
+    global CUSTOM_COMMAND
+    CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND')
+    if CUSTOM_COMMAND is None or CUSTOM_COMMAND == '':
+        CUSTOM_COMMAND = DEFAULT_COMMAND
     return (
         "您好！以下是可用的命令：\n"
+        "/start - 再次发送此帮助消息\n"
         "/reset - 触发 VPS 重置脚本\n"
         "/setcron <小时数> - 设置自动重置的时间间隔（例如：/setcron 24）\n"
         "/getcron - 获取当前自动重置的时间间隔和下次重置时间\n"
@@ -53,6 +60,7 @@ def generate_welcome_message():
         "/ssh - 列出所有可用的 VPS 用户名\n"
         "/ssh <username> - 连接到指定的 VPS\n"
         "/exit - 退出当前 SSH 会话\n"
+        "/setcommand - 查看要执行的自定义命令\n"
         "/setcommand <command> - 设置要执行的自定义命令（例如：/setcommand source ~/.profile && pm2 resurrect）\n"
         "/setpathcom [command] - 设置、查看或清除要在指定路径下执行的自定义命令\n"
         "   - 设置: /setpathcom pm2 resurrect\n"
@@ -70,6 +78,9 @@ def send_welcome_message_to_chat(bot):
     reply_markup = create_feedback_keyboard()
     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=welcome_message, reply_markup=reply_markup)
 
+def start_command(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text(generate_welcome_message())
+        
 def reset_vps_command(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) == TELEGRAM_CHAT_ID:
         update.message.reply_text('正在触发 VPS 重置脚本...')
@@ -177,7 +188,7 @@ def set_command(update: Update, context: CallbackContext) -> None:
         return
 
     if not context.args:
-        update.message.reply_text('请提供要执行的命令，例如：/setcommand source ~/.profile && pm2 resurrect')
+        update.message.reply_text(f'要执行的自定义命令为：{CUSTOM_COMMAND}')
         return
 
     CUSTOM_COMMAND = ' '.join(context.args)
@@ -234,6 +245,7 @@ def send_welcome_message(update: Update, context: CallbackContext) -> None:
 def setup_bot():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
+    dp.add_handler(CommandHandler("start", start_command))
     dp.add_handler(CommandHandler("reset", reset_vps_command))
     dp.add_handler(CommandHandler("setcron", set_cron))
     dp.add_handler(CommandHandler("getcron", get_cron))
