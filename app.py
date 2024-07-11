@@ -46,6 +46,10 @@ def get_beijing_time(dt=None):
     return dt.astimezone(beijing_tz)
 
 def generate_welcome_message():
+    global CUSTOM_COMMAND
+    CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND')
+    if CUSTOM_COMMAND is None or CUSTOM_COMMAND == '':
+        CUSTOM_COMMAND = DEFAULT_COMMAND
     return (
         "您好！以下是可用的命令：\n"
         "/reset - 触发 VPS 重置脚本\n"
