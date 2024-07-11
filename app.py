@@ -52,7 +52,7 @@ def generate_welcome_message():
         CUSTOM_COMMAND = DEFAULT_COMMAND
     return (
         "您好！以下是可用的命令：\n"
-        "/help - 再次发送此帮助消息\n"
+        "/start - 再次发送此帮助消息\n"
         "/reset - 触发 VPS 重置脚本\n"
         "/setcron <小时数> - 设置自动重置的时间间隔（例如：/setcron 24）\n"
         "/getcron - 获取当前自动重置的时间间隔和下次重置时间\n"
@@ -78,7 +78,7 @@ def send_welcome_message_to_chat(bot):
     reply_markup = create_feedback_keyboard()
     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=welcome_message, reply_markup=reply_markup)
 
-def help_command(update: Update, context: CallbackContext) -> None:
+def start_command(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(generate_welcome_message())
         
 def reset_vps_command(update: Update, context: CallbackContext) -> None:
@@ -245,7 +245,7 @@ def send_welcome_message(update: Update, context: CallbackContext) -> None:
 def setup_bot():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
-    dp.add_handler(CommandHandler("help", help_command))
+    dp.add_handler(CommandHandler("start", start_command))
     dp.add_handler(CommandHandler("reset", reset_vps_command))
     dp.add_handler(CommandHandler("setcron", set_cron))
     dp.add_handler(CommandHandler("getcron", get_cron))
