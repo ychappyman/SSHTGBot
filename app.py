@@ -4,7 +4,7 @@ import os
 import asyncio
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from vps_reset_script import run_main as vps_reset_main, DEFAULT_COMMAND
+from group_run import run_main as host_execute_main, DEFAULT_COMMAND
 import threading
 import time
 import requests
@@ -13,27 +13,29 @@ import pytz
 from ssh import handle_ssh_command, handle_exit_command, is_ssh_connected, ssh_sessions, ssh_timeouts
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
+from upload_keys import upload_public_keys
+import json
+from translations import get_translation
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+LANGUAGE = os.getenv('LANGUAGE', 'zh')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 ACCOUNTS_JSON = os.getenv('ACCOUNTS_JSON')
-AUTO_CONNECT_INTERVAL = os.getenv('AUTO_CONNECT_INTERVAL')
+AUTO_CONNECT_INTERVAL = os.getenv('AUTO_CONNECT_INTERVAL', '24')
 RENDER_APP_URL = os.getenv('RENDER_APP_URL')
 RESET_INTERVAL_VARIATION = 10  # 默认为10分钟
 FEEDBACK_GROUP_LINK = "https://t.me/+WIX6H-944HQzZmQ9"
-CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND')
-if CUSTOM_COMMAND is None or CUSTOM_COMMAND == '':
-    CUSTOM_COMMAND = DEFAULT_COMMAND
+CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND') or DEFAULT_COMMAND
 CUSTOM_PATH_COMMAND = None
 
-vps_reset_lock = threading.Lock()
-is_resetting_vps = False
-next_reset_time = None
+host_execute_lock = threading.Lock()
+is_executing_host = False
+next_execute_time = None
 
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
 
@@ -46,31 +48,11 @@ def get_beijing_time(dt=None):
     return dt.astimezone(beijing_tz)
 
 def generate_welcome_message():
-    global CUSTOM_COMMAND
-    CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND')
-    if CUSTOM_COMMAND is None or CUSTOM_COMMAND == '':
-        CUSTOM_COMMAND = DEFAULT_COMMAND
-    return (
-        "您好！以下是可用的命令：\n"
-        "/start - 再次发送此帮助消息\n"
-        "/reset - 触发 VPS 重置脚本\n"
-        "/setcron <小时数> - 设置自动重置的时间间隔（例如：/setcron 24）\n"
-        "/getcron - 获取当前自动重置的时间间隔和下次重置时间\n"
-        "/setvartime <分钟数> - 设置重置时间的随机变化范围（例如：/setvartime 10）\n"
-        "/ssh - 列出所有可用的 VPS 用户名\n"
-        "/ssh <username> - 连接到指定的 VPS\n"
-        "/exit - 退出当前 SSH 会话\n"
-        "/setcommand - 查看要执行的自定义命令\n"
-        "/setcommand <command> - 设置要执行的自定义命令（例如：/setcommand source ~/.profile && pm2 resurrect）\n"
-        "/setpathcom [command] - 设置、查看或清除要在指定路径下执行的自定义命令\n"
-        "   - 设置: /setpathcom pm2 resurrect\n"
-        "   - 查看: /setpathcom\n"
-        "   - 清除: /setpathcom clear"
-    )
+    return get_translation('welcome_message', LANGUAGE)
 
 def create_feedback_keyboard():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("问题反馈", url=FEEDBACK_GROUP_LINK, callback_data="feedback")
+        InlineKeyboardButton(get_translation('feedback_button', LANGUAGE), url=FEEDBACK_GROUP_LINK, callback_data="feedback")
     ]])
 
 def send_welcome_message_to_chat(bot):
@@ -81,27 +63,55 @@ def send_welcome_message_to_chat(bot):
 def start_command(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(generate_welcome_message())
         
-def reset_vps_command(update: Update, context: CallbackContext) -> None:
+def execute_host_command(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) == TELEGRAM_CHAT_ID:
-        update.message.reply_text('正在触发 VPS 重置脚本...')
-        threading.Thread(target=reset_vps, args=(context.bot,)).start()
+        update.message.reply_text(get_translation('executing_command', LANGUAGE))
+        threading.Thread(target=execute_host, args=(context.bot,)).start()
     else:
-        update.message.reply_text('您没有权限使用此命令。')
+        update.message.reply_text(get_translation('no_permission', LANGUAGE))
 
 def set_cron(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text('您没有权限使用此命令。')
+        update.message.reply_text(get_translation('no_permission', LANGUAGE))
         return
 
-    if not context.args or not context.args[0].isdigit():
-        update.message.reply_text('请提供有效的小时数，例如：/setcron 24')
+    global AUTO_CONNECT_INTERVAL, next_execute_time, RESET_INTERVAL_VARIATION
+
+    if not context.args:
+        # Display current settings
+        interval = int(AUTO_CONNECT_INTERVAL)
+        message = get_translation('current_settings', LANGUAGE).format(interval=interval, variation=RESET_INTERVAL_VARIATION)
+        
+        if next_execute_time:
+            now = get_beijing_time()
+            time_until_next_execute = next_execute_time - now
+            
+            message += get_translation('next_execution_time', LANGUAGE).format(
+                beijing_time=next_execute_time.strftime("%Y-%m-%d %H:%M:%S"),
+                utc_time=next_execute_time.astimezone(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
+            )
+            
+            if time_until_next_execute.total_seconds() > 0:
+                days, seconds = time_until_next_execute.days, time_until_next_execute.seconds
+                hours, remainder = divmod(seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
+                message += get_translation('time_until_next_execution', LANGUAGE).format(days=days, hours=hours, minutes=minutes)
+            else:
+                message += get_translation('next_execution_passed', LANGUAGE)
+        else:
+            message += get_translation('next_execution_not_set', LANGUAGE)
+        
+        update.message.reply_text(message)
+        return
+
+    if not context.args[0].isdigit():
+        update.message.reply_text(get_translation('invalid_hours', LANGUAGE))
         return
 
     interval = int(context.args[0])
-    global AUTO_CONNECT_INTERVAL, next_reset_time, RESET_INTERVAL_VARIATION
 
     if RESET_INTERVAL_VARIATION >= interval * 60:
-        update.message.reply_text(f'错误：当前偏差时间（{RESET_INTERVAL_VARIATION}分钟）大于或等于周期时间（{interval}小时）。请先使用 /setvartime 命令设置一个更小的偏差时间。')
+        update.message.reply_text(get_translation('variation_too_large', LANGUAGE).format(variation=RESET_INTERVAL_VARIATION, interval=interval))
         return
 
     AUTO_CONNECT_INTERVAL = str(interval)
@@ -109,115 +119,90 @@ def set_cron(update: Update, context: CallbackContext) -> None:
     scheduler.remove_all_jobs()
     now = get_beijing_time()
     
-    if interval > 0:
-        next_reset_time = calculate_next_reset_time(now, interval)
-        scheduler.add_job(scheduled_reset_vps, 'date', run_date=next_reset_time, args=[context.bot])
-        update.message.reply_text(
-            f'自动 VPS 重置间隔已设置为 {interval} 小时\n'
-            f'重置时间随机变化范围: ±{RESET_INTERVAL_VARIATION} 分钟\n'
-            f'下一次重置时间（已包含随机变化）：{next_reset_time.strftime("%Y-%m-%d %H:%M:%S")} (北京时间)'
+    next_execute_time = calculate_next_execute_time(now, interval)
+    scheduler.add_job(scheduled_execute_host, 'date', run_date=next_execute_time, args=[context.bot])
+    update.message.reply_text(
+        get_translation('cron_set', LANGUAGE).format(
+            interval=interval,
+            variation=RESET_INTERVAL_VARIATION,
+            beijing_time=next_execute_time.strftime("%Y-%m-%d %H:%M:%S"),
+            utc_time=next_execute_time.astimezone(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
         )
-    else:
-        next_reset_time = None
-        update.message.reply_text('自动 VPS 重置已禁用')
+    )
     
-    logger.info(f"自动 VPS 重置间隔已更新为 {interval} 小时，下一次重置时间：{next_reset_time}")
-
-def get_cron(update: Update, context: CallbackContext) -> None:
-    if AUTO_CONNECT_INTERVAL and int(AUTO_CONNECT_INTERVAL) > 0:
-        now = get_beijing_time()
-        
-        message = f'当前自动 VPS 重置间隔为 {AUTO_CONNECT_INTERVAL} 小时\n'
-        message += f'重置时间随机变化范围: ±{RESET_INTERVAL_VARIATION} 分钟\n'
-        
-        if next_reset_time:
-            time_until_next_reset = next_reset_time - now
-            
-            message += f'下一次重置时间（已包含随机变化）：{next_reset_time.strftime("%Y-%m-%d %H:%M:%S")} (北京时间)\n'
-            
-            if time_until_next_reset.total_seconds() > 0:
-                days, seconds = time_until_next_reset.days, time_until_next_reset.seconds
-                hours, remainder = divmod(seconds, 3600)
-                minutes, _ = divmod(remainder, 60)
-                message += f'距离下次重置还有：{days}天 {hours}小时 {minutes}分钟'
-            else:
-                message += '下次重置时间已过，正在重新调度...'
-                set_cron(update, context)
-        else:
-            message += '下一次重置时间尚未设置'
-        
-        update.message.reply_text(message)
-    else:
-        update.message.reply_text('当前未设置自动 VPS 重置间隔')
+    logger.info(f"执行命令周期已更新为 {interval} 小时，下一次执行命令时间：{next_execute_time}")
 
 def set_vartime(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text('您没有权限使用此命令。')
+        update.message.reply_text(get_translation('no_permission', LANGUAGE))
         return
 
-    if not context.args or not context.args[0].isdigit():
-        update.message.reply_text('请提供有效的分钟数，例如：/setvartime 10')
+    global RESET_INTERVAL_VARIATION, AUTO_CONNECT_INTERVAL
+
+    if not context.args:
+        update.message.reply_text(get_translation('current_variation', LANGUAGE).format(variation=RESET_INTERVAL_VARIATION))
+        return
+
+    if not context.args[0].isdigit():
+        update.message.reply_text(get_translation('invalid_minutes', LANGUAGE))
         return
 
     new_variation = int(context.args[0])
-    global RESET_INTERVAL_VARIATION, AUTO_CONNECT_INTERVAL
 
-    if AUTO_CONNECT_INTERVAL and int(AUTO_CONNECT_INTERVAL) > 0:
-        if new_variation >= int(AUTO_CONNECT_INTERVAL) * 60:
-            update.message.reply_text(f'错误：偏差时间（{new_variation}分钟）必须小于周期时间（{AUTO_CONNECT_INTERVAL}小时）')
-            return
+    if int(AUTO_CONNECT_INTERVAL) * 60 <= new_variation:
+        update.message.reply_text(get_translation('variation_too_large', LANGUAGE).format(variation=new_variation, interval=AUTO_CONNECT_INTERVAL))
+        return
 
     RESET_INTERVAL_VARIATION = new_variation
-    update.message.reply_text(f'重置时间随机变化范围已设置为 ±{RESET_INTERVAL_VARIATION} 分钟')
+    update.message.reply_text(get_translation('variation_set', LANGUAGE).format(variation=RESET_INTERVAL_VARIATION))
 
-    if AUTO_CONNECT_INTERVAL and int(AUTO_CONNECT_INTERVAL) > 0:
-        now = get_beijing_time()
-        global next_reset_time
-        next_reset_time = calculate_next_reset_time(now, int(AUTO_CONNECT_INTERVAL))
-        scheduler.remove_all_jobs()
-        scheduler.add_job(scheduled_reset_vps, 'date', run_date=next_reset_time, args=[context.bot])
-        update.message.reply_text(
-            f'自动 VPS 重置间隔保持为 {AUTO_CONNECT_INTERVAL} 小时\n'
-            f'下一次重置时间（已包含新的随机变化）：{next_reset_time.strftime("%Y-%m-%d %H:%M:%S")} (北京时间)'
+    now = get_beijing_time()
+    global next_execute_time
+    next_execute_time = calculate_next_execute_time(now, int(AUTO_CONNECT_INTERVAL))
+    scheduler.remove_all_jobs()
+    scheduler.add_job(scheduled_execute_host, 'date', run_date=next_execute_time, args=[context.bot])
+    update.message.reply_text(
+        get_translation('next_execution_updated', LANGUAGE).format(
+            interval=AUTO_CONNECT_INTERVAL,
+            beijing_time=next_execute_time.strftime("%Y-%m-%d %H:%M:%S"),
+            utc_time=next_execute_time.astimezone(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
         )
+    )
 
 def set_command(update: Update, context: CallbackContext) -> None:
     global CUSTOM_COMMAND
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text('您没有权限使用此命令。')
+        update.message.reply_text(get_translation('no_permission', LANGUAGE))
         return
 
     if not context.args:
-        update.message.reply_text(f'要执行的自定义命令为：{CUSTOM_COMMAND}')
+        update.message.reply_text(get_translation('custom_command', LANGUAGE).format(command=CUSTOM_COMMAND))
         return
 
     CUSTOM_COMMAND = ' '.join(context.args)
-    update.message.reply_text(f'自定义命令已设置为：{CUSTOM_COMMAND}')
+    update.message.reply_text(get_translation('custom_command_set', LANGUAGE).format(command=CUSTOM_COMMAND))
 
 def set_path_command(update: Update, context: CallbackContext) -> None:
     global CUSTOM_PATH_COMMAND
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text('您没有权限使用此命令。')
+        update.message.reply_text(get_translation('no_permission', LANGUAGE))
         return
 
     if not context.args:
-        # 查看当前设置
         if CUSTOM_PATH_COMMAND:
-            update.message.reply_text(f'当前设置的 pathcom 命令是：{CUSTOM_PATH_COMMAND}')
+            update.message.reply_text(get_translation('current_pathcom', LANGUAGE).format(command=CUSTOM_PATH_COMMAND))
         else:
-            update.message.reply_text('当前没有设置 pathcom 命令。')
+            update.message.reply_text(get_translation('no_pathcom', LANGUAGE))
     elif context.args[0].lower() == 'clear':
-        # 清除设置
         if CUSTOM_PATH_COMMAND:
             CUSTOM_PATH_COMMAND = None
-            update.message.reply_text('pathcom 命令已清除。')
+            update.message.reply_text(get_translation('pathcom_cleared', LANGUAGE))
         else:
-            update.message.reply_text('当前没有设置 pathcom 命令，无需清除。')
+            update.message.reply_text(get_translation('no_pathcom_to_clear', LANGUAGE))
     else:
-        # 设置新的命令
         CUSTOM_PATH_COMMAND = ' '.join(context.args)
-        update.message.reply_text(f'自定义路径命令已设置为：{CUSTOM_PATH_COMMAND}')
-
+        update.message.reply_text(get_translation('pathcom_set', LANGUAGE).format(command=CUSTOM_PATH_COMMAND))
+        
 def handle_message(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     if is_ssh_connected(chat_id):
@@ -226,14 +211,14 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         try:
             stdin, stdout, stderr = ssh.exec_command(command, timeout=30)
             result = stdout.read().decode() + stderr.read().decode()
-            update.message.reply_text(result or "命令执行完毕，无输出")
+            update.message.reply_text(result or get_translation('command_executed', LANGUAGE))
             
             if chat_id in ssh_timeouts:
                 ssh_timeouts[chat_id].cancel()
             ssh_timeouts[chat_id] = threading.Timer(900, lambda: timeout_ssh_session(context.bot, chat_id))
             ssh_timeouts[chat_id].start()
         except Exception as e:
-            update.message.reply_text(f"执行命令时出错：{str(e)}")
+            update.message.reply_text(get_translation('command_error', LANGUAGE).format(error=str(e)))
     else:
         send_welcome_message(update, context)
 
@@ -242,18 +227,34 @@ def send_welcome_message(update: Update, context: CallbackContext) -> None:
     reply_markup = create_feedback_keyboard()
     update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
+def change_language(update: Update, context: CallbackContext) -> None:
+    global LANGUAGE
+    if len(context.args) == 1:
+        new_language = context.args[0].lower()
+        if new_language in ['zh', 'en']:
+            LANGUAGE = new_language
+            os.environ['LANGUAGE'] = LANGUAGE  # 更新环境变量
+            update.message.reply_text(get_translation('language_changed', LANGUAGE).format(language=LANGUAGE))
+        else:
+            update.message.reply_text(get_translation('language_not_supported', LANGUAGE))
+    else:
+        current_language_name = "中文" if LANGUAGE == "zh" else "English"
+        update.message.reply_text(get_translation('current_language', LANGUAGE).format(language=current_language_name))
+        update.message.reply_text(get_translation('language_usage', LANGUAGE))
+
 def setup_bot():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start_command))
-    dp.add_handler(CommandHandler("reset", reset_vps_command))
+    dp.add_handler(CommandHandler("grouprun", execute_host_command))
     dp.add_handler(CommandHandler("setcron", set_cron))
-    dp.add_handler(CommandHandler("getcron", get_cron))
     dp.add_handler(CommandHandler("setvartime", set_vartime))
     dp.add_handler(CommandHandler("ssh", handle_ssh_command))
     dp.add_handler(CommandHandler("exit", handle_exit_command))
     dp.add_handler(CommandHandler("setcommand", set_command))
     dp.add_handler(CommandHandler("setpathcom", set_path_command))
+    dp.add_handler(CommandHandler("uploadkeys", upload_public_keys))
+    dp.add_handler(CommandHandler("language", change_language))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     return updater
 
@@ -263,38 +264,46 @@ def log_and_send(bot, message):
     logger.info(message)
     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
 
-def reset_vps(bot):
-    global is_resetting_vps
-    with vps_reset_lock:
-        if is_resetting_vps:
-            log_and_send(bot, 'VPS 重置脚本已在运行中，请稍后再试。')
+def execute_host(bot):
+    global is_executing_host
+    with host_execute_lock:
+        if is_executing_host:
+            log_and_send(bot, get_translation('executing_command', LANGUAGE))
             return
-        is_resetting_vps = True
+        is_executing_host = True
 
     try:
-        vps_reset_main(command=CUSTOM_COMMAND, global_path=CUSTOM_PATH_COMMAND)
+        host_execute_main(command=CUSTOM_COMMAND, global_path=CUSTOM_PATH_COMMAND)
     except Exception as e:
-        log_and_send(bot, f'VPS 重置过程中出现错误：{str(e)}')
+        log_and_send(bot, get_translation('command_error', LANGUAGE).format(error=str(e)))
     finally:
-        with vps_reset_lock:
-            is_resetting_vps = False
+        with host_execute_lock:
+            is_executing_host = False
 
-def calculate_next_reset_time(current_time, interval_hours):
+def calculate_next_execute_time(current_time, interval_hours):
     base_time = current_time + datetime.timedelta(hours=interval_hours)
     variation_minutes = random.uniform(-RESET_INTERVAL_VARIATION, RESET_INTERVAL_VARIATION)
     return base_time + datetime.timedelta(minutes=variation_minutes)
 
-def scheduled_reset_vps(bot):
-    global next_reset_time
+def scheduled_execute_host(bot):
+    global next_execute_time
     current_time = get_beijing_time()
-    log_and_send(bot, f'开始执行定时 VPS 重置... (当前北京时间: {current_time.strftime("%Y-%m-%d %H:%M:%S")})')
-    success_count, total_count = vps_reset_main(send_messages=False, command=CUSTOM_COMMAND, global_path=CUSTOM_PATH_COMMAND)
-    next_reset_time = calculate_next_reset_time(current_time, int(AUTO_CONNECT_INTERVAL))
+    log_and_send(bot, get_translation('scheduled_execution_start', LANGUAGE).format(
+        beijing_time=current_time.strftime("%Y-%m-%d %H:%M:%S"),
+        utc_time=current_time.astimezone(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
+    ))
+    success_count, total_count = host_execute_main(send_messages=False, command=CUSTOM_COMMAND, global_path=CUSTOM_PATH_COMMAND)
+    next_execute_time = calculate_next_execute_time(current_time, int(AUTO_CONNECT_INTERVAL))
     
     scheduler.remove_all_jobs()
-    scheduler.add_job(scheduled_reset_vps, 'date', run_date=next_reset_time, args=[bot])
+    scheduler.add_job(scheduled_execute_host, 'date', run_date=next_execute_time, args=[bot])
     
-    log_and_send(bot, f"VPS 重置完成。成功执行命令的 VPS 数量：{success_count}/{total_count}。下一次重置时间: {next_reset_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
+    log_and_send(bot, get_translation('scheduled_execution_complete', LANGUAGE).format(
+        success_count=success_count,
+        total_count=total_count,
+        next_time=next_execute_time.strftime('%Y-%m-%d %H:%M:%S'),
+        next_time_utc=next_execute_time.astimezone(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S')
+    ))
 
 @app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
 def webhook():
@@ -304,7 +313,7 @@ def webhook():
 
 @app.route('/')
 def home():
-    return "VPS 重置 Bot 正在运行！"
+    return get_translation('bot_running', LANGUAGE)
 
 def set_webhook():
     if not RENDER_APP_URL:
@@ -327,23 +336,28 @@ def set_webhook():
         logger.error(f"请求失败，状态码: {response.status_code}")
         return False
 
+def get_account_info(identifier):
+    accounts = json.loads(ACCOUNTS_JSON)
+    for account in accounts:
+        if account.get('customhostname', '').lower() == identifier.lower() or \
+           f"{account.get('ssluser', account.get('username'))}@{account.get('sslhost', account.get('hostname'))}".lower() == identifier.lower():
+            return account
+    return None
+
 if __name__ == '__main__':
     webhook_set = set_webhook()
     
     if webhook_set:
         send_welcome_message_to_chat(bot_updater.bot)
     else:
-        logger.error("Webhook 设置失败，不发送欢迎消息")
+        logger.error(get_translation('webhook_setup_failed', LANGUAGE))
     
-    if AUTO_CONNECT_INTERVAL and int(AUTO_CONNECT_INTERVAL) > 0:
-        interval = int(AUTO_CONNECT_INTERVAL)
-        now = get_beijing_time()
-        next_reset_time = calculate_next_reset_time(now, interval)
-        scheduler.add_job(scheduled_reset_vps, 'date', run_date=next_reset_time, args=[bot_updater.bot])
-        scheduler.start()
-        logger.info(f"自动 VPS 重置已启用，间隔为 {interval} 小时，下一次重置时间：{next_reset_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
-    else:
-        logger.info("自动 VPS 重置未启用，可以使用 /setcron 命令来设置")
+    interval = int(AUTO_CONNECT_INTERVAL)
+    now = get_beijing_time()
+    next_execute_time = calculate_next_execute_time(now, interval)
+    scheduler.add_job(scheduled_execute_host, 'date', run_date=next_execute_time, args=[bot_updater.bot])
+    scheduler.start()
+    logger.info(f"定时执行命令已启用，间隔为 {interval} 小时，下一次执行命令时间：北京时间 {next_execute_time.strftime('%Y-%m-%d %H:%M:%S')}(UTC时间：{next_execute_time.astimezone(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S')})")
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)

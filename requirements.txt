@@ -8,3 +8,4 @@ werkzeug==2.0.3
 pytz
 aiohttp
 APScheduler
+websockets
