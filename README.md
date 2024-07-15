@@ -1,5 +1,5 @@
 <h1 align="center">SSHTGBot</h1>
-<h1 align="center" style="font-size: 0.6em;">简体中文 / <a href="/.github/README_en.md">English</a></h1>
+<h3 align="center"><span style="font-size: 0.9em;">简体中文</span> / <a href="/.github/README_en.md" style="font-size: 0.9em;">English</a></h3>
 
 ## 项目简介
 
