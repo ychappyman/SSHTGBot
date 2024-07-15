@@ -1,46 +1,46 @@
-[中文版](/.github/README_zh.md)
+[English Version](/.github/README_en.md)
 
 # SSHTGBot
 
-## Project Introduction
+## 项目简介
 
-SSHTGBot is a Telegram-based automation tool primarily used for remote management and scheduled or manual execution of commands on multiple hosts (such as sevr00). This project allows users to perform various operations through a Telegram bot interface, including SSH connections to hosts, executing batch custom commands, setting up scheduled tasks, and more.
+SSHTGBot 是一个基于 Telegram 的自动化工具，主要用于远程管理和定时、手动执行命令到多个主机（如sevr00）。该项目允许用户通过 Telegram 机器人界面执行各种操作，包括SSH连接到主机、执行批量自定义命令、设置定时任务等。
 
-### Main Features
+### 主要功能
 
-1. Remote control of hosts through Telegram bot interface
-2. Support for SSH connections to multiple hosts
-3. Execute custom commands or preset scripts
-4. Set up scheduled script execution tasks
-5. Support for key-based login
-6. Support for batch public key upload
+1. 通过 Telegram 机器人接口远程控制主机
+2. 支持 SSH 连接到多个主机
+3. 执行自定义命令或预设的脚本
+4. 设置定时执行脚本任务
+5. 支持密钥登录
+6. 支持批量上传公钥
 
-## Telegram Discussion Group
+## Telegram 交流群
 
-Welcome to join our Telegram discussion group, where you can discuss usage experiences with other users, get help, and learn about the latest project updates:
+欢迎加入我们的 Telegram 交流群，在这里您可以与其他用户讨论使用心得，获取帮助，以及了解最新的项目动态：
 
-[Join SSHTGBot Discussion Group](https://t.me/+WIX6H-944HQzZmQ9)
+[加入SSHTGBot交流群](https://t.me/+WIX6H-944HQzZmQ9)
 
-## Deployment Method
+## 部署方法
 
-### Preparations
+### 准备工作
 
-1. A Telegram bot Token. Search for @BotFather in Telegram, create a new Bot, and obtain the API Token.
-2. Your Telegram user ID. To obtain: Send a message to the Bot, visit https://api.telegram.org/bot<your bot token>/getupdates to get the Chat ID.
-3. A Render account (for deployment)
-4. Your host account information (including SSH username, password, and SSH address)
+1. 一个 Telegram 机器人 Token。在 Telegram 中搜索 @BotFather，创建新 Bot，并获取 API Token。
+2. 您的 Telegram 用户 ID。获取方式：向 Bot 发送一条消息，访问 https://api.telegram.org/bot<your bot token>/getupdates 获取 Chat ID。
+3. 一个 Render 账户（用于部署）
+4. 您的主机账户信息（包括ssh用户名和密码、ssh地址）
 
-### Deployment Steps
+### 部署步骤
 
-1. Fork this project to your GitHub account.
+1. Fork 本项目到您的 GitHub 账户。
 
-2. Create a new Web Service in Render and connect it to your forked GitHub repository.
+2. 在 Render 中创建一个新的 Web Service，并连接到您 fork 的 GitHub 仓库。
 
-3. Set the following variables in Render's environment variables:
-   - `LAUNUAGE`: Default language is Chinese
-   - `TELEGRAM_BOT_TOKEN`: Your Telegram bot Token
-   - `TELEGRAM_CHAT_ID`: Your Telegram user ID
-   - `ACCOUNTS_JSON`: JSON string containing host account information, formatted as follows:
+3. 在 Render 的环境变量中设置以下变量：
+   - `LAUNUAGE`: 默认语言为中文
+   - `TELEGRAM_BOT_TOKEN`: 您的 Telegram 机器人 Token
+   - `TELEGRAM_CHAT_ID`: 您的 Telegram 用户 ID 
+   - `ACCOUNTS_JSON`: 包含主机账户信息的 JSON 字符串，格式如下：
      ```json
      [
        {
@@ -48,8 +48,8 @@ Welcome to join our Telegram discussion group, where you can discuss usage exper
          "ssluser": "your_ssluser1",
          "password": "your_password1",
          "sslhost": "your_sslhost1",
-         "secretkey": "render Secret Files secretkey path1",
-         "publickey": "render Secret Files publickey path1 file suffix .pub",
+         "secretkey": "render Secret Files secretkey 路径1",
+         "publickey": "render Secret Files publickey 路径1文件后缀.pub",
          "path": "optional_path1"
        },
        {
@@ -57,61 +57,61 @@ Welcome to join our Telegram discussion group, where you can discuss usage exper
          "ssluser": "your_ssluser2",
          "password": "your_password2",
          "sslhost": "your_sslhost2",
-         "secretkey": "render Secret Files secretkey path2",
-         "publickey": "render Secret Files publickey path2",
+         "secretkey": "render Secret Files secretkey 路径2",
+         "publickey": "render Secret Files publickey 路径2",
          "path": "optional_path2"
        },     
        ...
      ]
      ```
-   - `AUTO_CONNECT_INTERVAL`: Time interval for automatic reset (hours), optional, default is 24, can be turned off by entering /set_cron 0 in Telegram after deployment.
-   - `RENDER_APP_URL`: Your Render application URL (format: https://*******.onrender.com, in the upper left corner of the project, do not include a / at the end of the address)
-   - `CUSTOM_COMMAND`: Initial custom execution command (after setting, the custom command will not be cleared after Render redeployment)
+   - `AUTO_CONNECT_INTERVAL`: 自动重置的时间间隔（小时），选填，整数默认24，部署后可在telegram中输入/set_cron 0关闭定时重置。
+   - `RENDER_APP_URL`: 您的 Render 应用 URL（格式：https://*******.onrender.com，项目左上角，地址最后不要有/）
+   - `CUSTOM_COMMAND`: 初始自定义执行命令（设置后，Render重新部署后不会清空自定义命令）
 
-4. Start Docker in Render.
+4. 在 Render 中docker启动。
 
-Note: Render can deploy one free project, but there may be a 50s delay if not accessed for a long time. You can download UptimeRobot on your phone to keep it active for free.
+备注：Render可以部署一个免费项目，长时间不访问会可能有50s迟缓，可以手机下载UptimeRobot免费保持活跃。
 
-## Usage Instructions
+## 使用说明
 
-### Basic Commands
+### 基本命令
 
-- `/language` - Switch language
-- `/start` - Send this help message again (entering non-command characters can also push help)
-- `/grouprun` - Trigger batch host command execution
-- `/setcron <hours>` - Set and view the command execution cycle (e.g., /setcron 24)
-- `/setvartime <minutes>` - Set and view the random variation range for the command execution cycle (e.g., /setvartime 10)
-- `/ssh` - List all available hosts
-- `/ssh <customhostname or ssluser@sslhost>` - Connect to the specified host
-- `/exit` - Exit the current SSH session
-- `/setcommand <command>` - Set the custom command to be executed (e.g., /setcommand source ~/.profile && pm2 resurrect)
-- `/setpathcom [command]` - Set, view, or clear the custom command to be executed in the specified path
-   - Set: `/setpathcom pm2 resurrect`
-   - View: `/setpathcom`
-   - Clear: `/setpathcom clear`
-- `/uploadkeys` - Batch upload public keys to remote hosts (after setting keys and uploading public keys, it is recommended to delete SSH login passwords and public keys for security)
+- `/language` - 切换语言 (Switch language)
+- `/start` - 再次发送此帮助消息（输入非命令字符也可推送帮助）
+- `/grouprun` - 触发批量主机执行命令
+- `/setcron <小时数>` - 设置、查看执行命令的周期（例如：/setcron 24）
+- `/setvartime <分钟数>` - 设置、查看执行命令周期的随机变化范围（例如：/setvartime 10）
+- `/ssh` - 列出所有可用的主机
+- `/ssh <customhostname 或 ssluser@sslhost>` - 连接到指定的主机
+- `/exit` - 退出当前 SSH 会话
+- `/setcommand <command>` - 设置要执行的自定义命令（例如：/setcommand source ~/.profile && pm2 resurrect）
+- `/setpathcom [command]` - 设置、查看或清除要在指定路径下执行的自定义命令
+   - 设置: `/setpathcom pm2 resurrect`
+   - 查看: `/setpathcom`
+   - 清除: `/setpathcom clear`
+- `/uploadkeys` - 批量上传公钥到远程主机（设置密钥及上传公钥后为保证使用安全建议删除ssh登录密码和公钥）
 
-### Notes
+### 注意事项
 
-- SSH sessions have a 15-minute timeout, after which the connection will automatically disconnect.
-- All operations and execution results will be reported in real-time through the Telegram bot.
-- Please ensure that your custom commands are safe and will not cause damage to the hosts.
+- SSH 会话有15分钟的超时时间，超时后会自动断开连接。
+- 所有的操作和执行结果都会通过 Telegram 机器人实时反馈。
+- 请确保您的自定义命令是安全的，不会对主机造成损害。
 
-## Troubleshooting
+## 故障排除
 
-If you encounter problems, please check the following points:
+如果遇到问题，请检查以下几点：
 
-1. Ensure all environment variables are correctly set.
-2. Check Render logs for more detailed error information.
-3. Make sure your Telegram bot Token is valid and the bot has been added to the specified chat.
-4. Verify that the host login information is correct, including hostname, username, and password.
+1. 确保所有环境变量都已正确设置。
+2. 检查 Render 日志以获取更详细的错误信息。
+3. 确保您的 Telegram 机器人 Token 是有效的，且机器人已被添加到指定的聊天中。
+4. 验证主机的登录信息是否正确，包括主机名、用户名和密码。
 
-If the problem persists, please submit an issue to the project's GitHub repository.
+如果问题仍然存在，请提交一个 issue 到项目的 GitHub 仓库。
 
-## Disclaimer
+## 免责声明
 
-This project is for educational and research purposes only. Any operations using this tool should comply with relevant laws, regulations, and service terms. Users are fully responsible for all consequences of using this tool.
+本项目仅用于教育和研究目的。使用本工具进行任何操作都应遵守相关法律法规和服务条款。用户应对使用本工具的所有后果负全部责任。
 
-The developers are not responsible for any direct or indirect losses caused by using this tool, including but not limited to data loss, system crashes, security vulnerabilities, and other issues. By using this tool, you agree to assume all related risks.
+开发者不对因使用本工具而导致的任何直接或间接损失负责，包括但不限于数据丢失、系统崩溃、安全漏洞等问题。使用本工具即表示您同意承担所有相关风险。
 
-Please use this tool with caution and ensure you have permission to operate on the target hosts. Do not use this tool for illegal purposes or on unauthorized systems.
+请谨慎使用本工具，并确保您有权限对目标主机进行操作。不要将本工具用于非法用途或未经授权的系统。
