@@ -1,4 +1,4 @@
-[中文版](/README.md)
+<h1 align="center"><a href="/README.md">中文简体</a> / English</h1>
 
 # SSHTGBot
 
