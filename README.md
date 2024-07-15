@@ -1,4 +1,4 @@
-<h1 align="center">简体中文 / [English](/.github/README_en.md)</h1>
+<h1 align="center">简体中文 / <a href="/.github/README_en.md">English</a></h1>
 
 # SSHTGBot
 
