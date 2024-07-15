@@ -1,4 +1,4 @@
-# translations.py
+from language_manager import language_manager
 
 translations = {
     'zh': {
@@ -187,5 +187,9 @@ translations = {
     }
 }
 
-def get_translation(key, lang='zh'):
-    return translations.get(lang, translations['zh']).get(key, translations['zh'].get(key, key))
+def get_translation(key, language=None):
+    if language is None:
+        language = language_manager.get_language()
+
+    # 如果指定的语言不存在，使用中文作为后备
+    return translations.get(language, translations['zh']).get(key, translations['zh'].get(key, key))

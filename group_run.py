@@ -1,5 +1,3 @@
-# group_run.py
-
 import json
 import asyncio
 from datetime import datetime, timedelta
@@ -9,13 +7,13 @@ import aiohttp
 import logging
 import traceback
 from translations import get_translation
+from language_manager import language_manager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-LANGUAGE = os.getenv('LANGUAGE', 'zh')
 
 # 默认命令
 DEFAULT_COMMAND = "source ~/.profile && pm2 resurrect"
@@ -27,7 +25,8 @@ async def execute_ssh_command(sslhost, ssluser, password, command, global_path, 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
-        logger.info(get_translation('processing_account', LANGUAGE).format(account=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+        language = language_manager.get_language()
+        logger.info(get_translation('processing_account', language).format(account=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
         connection_start = asyncio.get_event_loop().time()
         
         try:
@@ -49,7 +48,7 @@ async def execute_ssh_command(sslhost, ssluser, password, command, global_path, 
                     timeout=10
                 )
         except asyncio.TimeoutError:
-            await send_telegram_message(get_translation('connecting_to_host', LANGUAGE).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+            await send_telegram_message(get_translation('connecting_to_host', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
             try:
                 if secret_key_path:
                     await asyncio.wait_for(
@@ -68,7 +67,7 @@ async def execute_ssh_command(sslhost, ssluser, password, command, global_path, 
                         timeout=20
                     )
             except asyncio.TimeoutError:
-                await send_telegram_message(get_translation('connection_failed', LANGUAGE).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+                await send_telegram_message(get_translation('connection_failed', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
                 return None, None, "Connection Timeout", None
         
         if global_path:
@@ -94,11 +93,11 @@ async def execute_ssh_command(sslhost, ssluser, password, command, global_path, 
         try:
             output, error = await asyncio.wait_for(execute_and_read(), timeout=10)
         except asyncio.TimeoutError:
-            await send_telegram_message(get_translation('command_execution_timeout', LANGUAGE).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+            await send_telegram_message(get_translation('command_execution_timeout', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
             try:
                 output, error = await asyncio.wait_for(execute_and_read(), timeout=110)
             except asyncio.TimeoutError:
-                await send_telegram_message(get_translation('command_execution_failed', LANGUAGE).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+                await send_telegram_message(get_translation('command_execution_failed', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
                 return None, None, f"Command Execution Timeout: {full_command}", full_command
         
         command_time = asyncio.get_event_loop().time() - command_start
@@ -109,7 +108,7 @@ async def execute_ssh_command(sslhost, ssluser, password, command, global_path, 
             return client, output, None, full_command
         return client, None, error, full_command
     except Exception as e:
-        logger.error(get_translation('host_operation_error', LANGUAGE).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}", error=str(e), traceback=traceback.format_exc()))
+        logger.error(get_translation('host_operation_error', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}", error=str(e), traceback=traceback.format_exc()))
         return None, None, str(e), None
     finally:
         if client:
@@ -126,7 +125,8 @@ async def process_account(account, send_messages, command, global_path):
     now_utc = format_to_iso(datetime.utcnow())
     now_beijing = format_to_iso(datetime.utcnow() + timedelta(hours=8))
     
-    logger.info(get_translation('processing_account', LANGUAGE).format(account=customhostname or ssluser))
+    language = language_manager.get_language()
+    logger.info(get_translation('processing_account', language).format(account=customhostname or ssluser))
     
     try:
         client, output, error, full_command = await asyncio.wait_for(
@@ -134,10 +134,10 @@ async def process_account(account, send_messages, command, global_path):
             timeout=180  # 总超时时间设置为180秒（3分钟）
         )
     except asyncio.TimeoutError:
-        await send_telegram_message(get_translation('host_operation_timeout', LANGUAGE).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+        await send_telegram_message(get_translation('host_operation_timeout', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
         return False
     except Exception as e:
-        error_message = get_translation('host_operation_error', LANGUAGE).format(
+        error_message = get_translation('host_operation_error', language).format(
             host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
             error=str(e),
             traceback=traceback.format_exc()
@@ -147,7 +147,7 @@ async def process_account(account, send_messages, command, global_path):
         return False
     
     if client:
-        login_success_message = get_translation('host_login_success', LANGUAGE).format(
+        login_success_message = get_translation('host_login_success', language).format(
             host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
             beijing_time=now_beijing,
             utc_time=now_utc
@@ -157,7 +157,7 @@ async def process_account(account, send_messages, command, global_path):
             await send_telegram_message(login_success_message)
         
         if not error:
-            ssh_success_message = get_translation('host_command_success', LANGUAGE).format(
+            ssh_success_message = get_translation('host_command_success', language).format(
                 host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
                 command=full_command
             )
@@ -166,7 +166,7 @@ async def process_account(account, send_messages, command, global_path):
                 await send_telegram_message(ssh_success_message)
             return True
         else:
-            ssh_error_message = get_translation('host_command_failed', LANGUAGE).format(
+            ssh_error_message = get_translation('host_command_failed', language).format(
                 host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
                 command=full_command,
                 error=error
@@ -175,7 +175,7 @@ async def process_account(account, send_messages, command, global_path):
             if send_messages:
                 await send_telegram_message(ssh_error_message)
     else:
-        ssh_error_message = get_translation('host_login_failed', LANGUAGE).format(
+        ssh_error_message = get_translation('host_login_failed', language).format(
             host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
             beijing_time=now_beijing,
             utc_time=now_utc,
@@ -193,7 +193,8 @@ async def main(accounts, send_messages=True, command=DEFAULT_COMMAND, global_pat
     success_count = sum(results)
     total_count = len(accounts)
     
-    completion_message = get_translation('all_hosts_complete', LANGUAGE).format(success_count=success_count, total_count=total_count)
+    language = language_manager.get_language()
+    completion_message = get_translation('all_hosts_complete', language).format(success_count=success_count, total_count=total_count)
     logger.info(completion_message)
     if send_messages:
         await send_telegram_message(completion_message)
@@ -224,7 +225,8 @@ def run_main(send_messages=True, command=DEFAULT_COMMAND, global_path=None):
         accounts = json.loads(accounts_json)
         return asyncio.run(main(accounts, send_messages, command, global_path))
     else:
-        logger.error(get_translation('no_accounts_json', LANGUAGE))
+        language = language_manager.get_language()
+        logger.error(get_translation('no_accounts_json', language))
         return 0, 0
 
 if __name__ == "__main__":

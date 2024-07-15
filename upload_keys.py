@@ -1,29 +1,28 @@
-# upload_keys.py
-
 import json
 import paramiko
 import os
 from telegram import Update
 from telegram.ext import CallbackContext
 from translations import get_translation
-
-LANGUAGE = os.getenv('LANGUAGE', 'zh')  # 从环境变量中获取 LANGUAGE
+from language_manager import language_manager
 
 def upload_public_keys(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
+    language = language_manager.get_language()
+    
     if str(chat_id) != os.getenv('TELEGRAM_CHAT_ID'):
-        update.message.reply_text(get_translation('no_permission', LANGUAGE))
+        update.message.reply_text(get_translation('no_permission', language))
         return
 
     accounts_json = os.getenv('ACCOUNTS_JSON')
     if not accounts_json:
-        update.message.reply_text(get_translation('accounts_json_not_set', LANGUAGE))
+        update.message.reply_text(get_translation('accounts_json_not_set', language))
         return
 
     try:
         accounts = json.loads(accounts_json)
     except json.JSONDecodeError:
-        update.message.reply_text(get_translation('accounts_json_error', LANGUAGE))
+        update.message.reply_text(get_translation('accounts_json_error', language))
         return
 
     results = []
@@ -37,11 +36,11 @@ def upload_public_keys(update: Update, context: CallbackContext) -> None:
         host_identifier = f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"
 
         if not public_key_path:
-            results.append(get_translation('no_public_key', LANGUAGE).format(host=host_identifier))
+            results.append(get_translation('no_public_key', language).format(host=host_identifier))
             continue
 
         if not password:
-            results.append(get_translation('no_login_password', LANGUAGE).format(host=host_identifier))
+            results.append(get_translation('no_login_password', language).format(host=host_identifier))
             continue
 
         try:
@@ -55,8 +54,11 @@ def upload_public_keys(update: Update, context: CallbackContext) -> None:
             ssh.exec_command(f'mkdir -p ~/.ssh && echo "{public_key}" >> ~/.ssh/authorized_keys')
             ssh.close()
 
-            results.append(get_translation('public_key_upload_success', LANGUAGE).format(host=host_identifier))
+            results.append(get_translation('public_key_upload_success', language).format(host=host_identifier))
         except Exception as e:
-            results.append(get_translation('public_key_upload_failed', LANGUAGE).format(host=host_identifier, error=str(e)))
+            results.append(get_translation('public_key_upload_failed', language).format(host=host_identifier, error=str(e)))
 
     update.message.reply_text("\n".join(results))
+
+if __name__ == "__main__":
+    print("This script is intended to be imported and used by the main Telegram bot script.")

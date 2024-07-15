@@ -16,6 +16,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from upload_keys import upload_public_keys
 import json
 from translations import get_translation
+from language_manager import language_manager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -233,12 +234,12 @@ def change_language(update: Update, context: CallbackContext) -> None:
         new_language = context.args[0].lower()
         if new_language in ['zh', 'en']:
             LANGUAGE = new_language
-            os.environ['LANGUAGE'] = LANGUAGE  # 更新环境变量
+            language_manager.set_language(LANGUAGE)
             update.message.reply_text(get_translation('language_changed', LANGUAGE).format(language=LANGUAGE))
         else:
             update.message.reply_text(get_translation('language_not_supported', LANGUAGE))
     else:
-        current_language_name = "中文" if LANGUAGE == "zh" else "English"
+        current_language_name = "中文" if language_manager.get_language() == "zh" else "English"
         update.message.reply_text(get_translation('current_language', LANGUAGE).format(language=current_language_name))
         update.message.reply_text(get_translation('language_usage', LANGUAGE))
 
