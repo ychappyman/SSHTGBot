@@ -1,6 +1,6 @@
-<h1 align="center">简体中文 / <a href="/.github/README_en.md">English</a></h1>
+<h1 align="center">SSHTGBot</h1>
 
-# SSHTGBot
+<h1 align="center">简体中文 / <a href="/.github/README_en.md">English</a></h1>
 
 ## 项目简介
 
