@@ -44,13 +44,14 @@ SSHTGBot 是一个基于 Telegram 的自动化工具，主要用于远程管理�
      ```json
      [
        {
-         "customhostname": "customhostname1",
-         "ssluser": "your_ssluser1",
-         "password": "your_password1",
-         "sslhost": "your_sslhost1",
-         "secretkey": "render Secret Files secretkey 路径1",
-         "publickey": "render Secret Files publickey 路径1文件后缀.pub",
-         "path": "optional_path1"
+         "customhostname": "customhostname1",(自定义主机名称,建议设置)
+         "ssluser": "your_ssluser1",（ssh用户名）
+         "password": "your_password1",（ssh密码）
+         "sslhost": "your_sslhost1",（ssh地址，格式示例："s5.serv00.com"）
+         "secretkey": "render Secret Files secretkey 路径1",（在render环境变量下面设置。格式示例：/etc/secrets/<filename>）
+         "publickey": "render Secret Files publickey 路径1文件后缀.pub",（在render环境变量下面设置。格式示例：/etc/secrets/<filename>）
+         "path": "optional_path1"(注意最后一行此处无逗号，path这一行选填，若不设置且setpathcom已设置，会跳过path执行setcommand默认命令.
+                                   格式示例："~/domains/ssgj.dns-dynamic.net/vless")
        },
        {
          "customhostname": "customhostname2",
