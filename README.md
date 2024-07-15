@@ -1,4 +1,4 @@
-<h1 align="center">SSHTGBot</h1>
+<div align="center" style="font-size: 2em; font-weight: bold;">SSHTGBot</div>
 
 <h1 align="center">简体中文 / <a href="/.github/README_en.md">English</a></h1>
 
