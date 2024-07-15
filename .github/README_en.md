@@ -1,5 +1,5 @@
 <h1 align="center">SSHTGBot</h1>
-<h3 align="center"><span style="font-size: 0.9em;"><a href="/README.md">中文简体</a></span> / <span style="font-size: 0.9em;">English</span></h3>
+<h3 align="center"><span style="font-size: 0.9em;"><a href="/README.md">简体中文</a></span> / <span style="font-size: 0.9em;">English</span></h3>
 
 ## Project Introduction
 
