@@ -44,13 +44,14 @@ Welcome to join our Telegram discussion group, where you can discuss usage exper
      ```json
      [
        {
-         "customhostname": "customhostname1",
-         "ssluser": "your_ssluser1",
-         "password": "your_password1",
-         "sslhost": "your_sslhost1",
-         "secretkey": "render Secret Files secretkey path1",
-         "publickey": "render Secret Files publickey path1 file suffix .pub",
-         "path": "optional_path1"
+         "customhostname": "customhostname1",(custom hostname, recommended to set)
+         "ssluser": "your_ssluser1",(SSH username)
+         "password": "your_password1",(SSH password)
+         "sslhost": "your_sslhost1",(SSH address, format example: "s5.serv00.com")
+         "secretkey": "render Secret Files secretkey path1",(Set under render environment variables. Format example: /etc/secrets/<filename>)
+         "publickey": "render Secret Files publickey path1 file suffix .pub",(Set under render environment variables. Format example: /etc/secrets/<filename>)
+         "path": "optional_path1"(Note: no comma at the end of this last line. This path line is optional. If not set and setpathcom is set, it will skip path and execute the default setcommand command.
+                               Format example: "~/domains/ssgj.dns-dynamic.net/vless")
        },
        {
          "customhostname": "customhostname2",
