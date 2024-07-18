@@ -25,7 +25,7 @@ SSHTGBot 是一个基于 Telegram 的自动化工具，主要用于远程管理�
 ### 准备工作
 
 1. 一个 Telegram 机器人 Token。在 Telegram 中搜索BotFather，创建新 Bot，并获取 API Token。
-2. 您的 Telegram 用户 ID。获取方式：向 Bot 发送一条消息，访问 https://api.telegram.org/bot<your bot token>/getupdates 获取 Chat ID。
+2. 您的 Telegram 用户 ID。获取方式：向 Bot 发送一条消息，访问  `https://api.telegram.org/bot<your_bot_token>/getUpdates`  获取 Chat ID。
 3. 一个 Render 账户（用于部署）
 4. 您的主机账户信息（包括ssh用户名和密码、ssh地址）
 
