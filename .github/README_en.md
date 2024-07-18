@@ -25,7 +25,7 @@ Welcome to join our Telegram discussion group, where you can discuss usage exper
 ### Preparations
 
 1. A Telegram bot Token. Search for BotFather in Telegram, create a new Bot, and obtain the API Token.
-2. Your Telegram user ID. To obtain: Send a message to the Bot, visit https://api.telegram.org/bot<your bot token>/getupdates to get the Chat ID.
+2. Your Telegram user ID. To obtain: Send a message to the Bot, visit `https://api.telegram.org/bot<your_bot_token>/getUpdates` to get the Chat ID.
 3. A Render account (for deployment)
 4. Your host account information (including SSH username, password, and SSH address)
 
