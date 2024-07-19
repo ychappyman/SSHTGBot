@@ -67,6 +67,10 @@ translations = {
         'ssh_session_timeout': "SSH 会话已超时，连接已断开",
         'command_execution_error': "执行命令时出错：{error}",
         'no_active_connection': "没有活动的 SSH 连接，请先使用 /ssh 连接到主机",
+        'enter_password': "请输入密码（消息将在短时间后自动删除）：",
+        'changed_directory': "已切换到目录：{dir}",
+        'reconnected': "已重新连接到主机。",
+        'reconnect_failed': "重新连接失败：{error}",
 
         # Group_run.py translations
         'processing_account': "正在处理账户: {account}",
@@ -159,6 +163,10 @@ translations = {
         'ssh_session_timeout': "SSH session timed out, connection closed",
         'command_execution_error': "Error executing command: {error}",
         'no_active_connection': "No active SSH connection. Please use /ssh to connect to a host first.",
+        'enter_password': "Please enter the password (this message will be deleted shortly):",
+        'changed_directory': "Changed directory to: {dir}",
+        'reconnected': "Reconnected to the host.",
+        'reconnect_failed': "Failed to reconnect: {error}",
 
         # Group_run.py translations
         'processing_account': "Processing account: {account}",

@@ -10,7 +10,7 @@ import time
 import requests
 import datetime
 import pytz
-from ssh import handle_ssh_command, handle_exit_command, is_ssh_connected, ssh_sessions, ssh_timeouts
+from ssh import handle_ssh_command, handle_exit_command, is_ssh_connected, ssh_sessions, ssh_timeouts,handle_ssh_command_execution,handle_password_input
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 from upload_keys import upload_public_keys
@@ -206,23 +206,33 @@ def set_path_command(update: Update, context: CallbackContext) -> None:
         
 def handle_message(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
-    if is_ssh_connected(chat_id):
-        ssh = ssh_sessions[chat_id]
-        command = update.message.text
-        try:
-            stdin, stdout, stderr = ssh.exec_command(command, timeout=30)
-            result = stdout.read().decode() + stderr.read().decode()
-            update.message.reply_text(result or get_translation('command_executed', LANGUAGE))
-            
-            if chat_id in ssh_timeouts:
-                ssh_timeouts[chat_id].cancel()
-            ssh_timeouts[chat_id] = threading.Timer(900, lambda: timeout_ssh_session(context.bot, chat_id))
-            ssh_timeouts[chat_id].start()
-        except Exception as e:
-            update.message.reply_text(get_translation('command_error', LANGUAGE).format(error=str(e)))
-    else:
-        send_welcome_message(update, context)
+    language = context.bot_data.get('language', 'zh')
+    
+    # 检查是否正在等待 SSH 密码
+    if context.user_data.get('awaiting_ssh_password'):
+        handle_password_input(update, context)
+        return
 
+    # 检查是否有活跃的 SSH 连接
+    if is_ssh_connected(chat_id):
+        handle_ssh_command_execution(update, context)
+        
+        # 重置 SSH 会话超时
+        if chat_id in ssh_timeouts:
+            ssh_timeouts[chat_id].cancel()
+        ssh_timeouts[chat_id] = threading.Timer(900, lambda: timeout_ssh_session(context.bot, chat_id, language))
+        ssh_timeouts[chat_id].start()
+        
+        return
+
+    # 处理普通消息
+    if update.message.text.startswith('/'):
+        # 如果是命令，不做处理（假设其他地方已经注册了命令处理器）
+        return
+    else:
+        # 非命令文本消息，发送欢迎消息
+        send_welcome_message(update, context)
+        
 def send_welcome_message(update: Update, context: CallbackContext) -> None:
     welcome_message = generate_welcome_message()
     reply_markup = create_feedback_keyboard()
