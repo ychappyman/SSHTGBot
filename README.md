@@ -47,9 +47,9 @@ SSHTGBot 是一个基于 Telegram 的自动化工具，主要用于远程管理�
          "ssluser": "your_ssluser1",（ssh用户名）
          "password": "your_password1",（ssh密码）
          "sslhost": "your_sslhost1",（ssh地址，格式示例："s5.serv00.com"）
-         "secretkey": "render Secret Files secretkey 路径1",（在render环境变量下面设置。格式示例：/etc/secrets/<filename>）
-         "publickey": "render Secret Files publickey 路径1文件后缀.pub",（在render环境变量下面设置。格式示例：/etc/secrets/<filename>）
-         "path": "optional_path1"(注意最后一行此处无逗号，path这一行选填，若不设置且setpathcom已设置，会跳过path执行setcommand默认命令.
+         "secretkey": "私钥路径1包括私钥文件",（选填，用于上传私钥至render，在render环境变量下Secret Files中设置。格式示例：/etc/secrets/<filename>，设置私钥及上传公钥后为保证使用安全建议删除ssh登录密码和公钥）
+         "publickey": "公钥路径1包括公钥文件，文件后缀.pub",（选填，用于上传公钥至ssh主机，在render环境变量下Secret Files中设置。格式示例：/etc/secrets/<filename>）
+         "path": "optional_path1"(选填，注意最后一行此处无逗号。path这一行，若不设置且setpathcom已设置，会跳过path执行setcommand默认命令，若设置path且setpathcom已设置，grouprun及定时任务对应主机会执行setpathcom命令.
                                    格式示例："~/domains/ssgj.dns-dynamic.net/vless")
        },
        {
@@ -57,8 +57,8 @@ SSHTGBot 是一个基于 Telegram 的自动化工具，主要用于远程管理�
          "ssluser": "your_ssluser2",
          "password": "your_password2",
          "sslhost": "your_sslhost2",
-         "secretkey": "render Secret Files secretkey 路径2",
-         "publickey": "render Secret Files publickey 路径2",
+         "secretkey": "私钥路径2",
+         "publickey": "公钥路径",
          "path": "optional_path2"
        },     
        ...
@@ -89,7 +89,7 @@ SSHTGBot 是一个基于 Telegram 的自动化工具，主要用于远程管理�
    - 设置: `/setpathcom pm2 resurrect`
    - 查看: `/setpathcom`
    - 清除: `/setpathcom clear`
-- `/uploadkeys` - 批量上传公钥到远程主机（设置密钥及上传公钥后为保证使用安全建议删除ssh登录密码和公钥）
+- `/uploadkeys` - 批量上传公钥到远程主机（设置私钥及上传公钥后为保证使用安全建议删除ssh登录密码和公钥）
 
 ### 注意事项
 
