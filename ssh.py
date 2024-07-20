@@ -8,6 +8,7 @@ import threading
 import time
 import re
 from translations import get_translation
+from language_manager import language_manager
 
 # 从环境变量读取主机账户信息
 ACCOUNTS_JSON = os.getenv('ACCOUNTS_JSON')
@@ -20,7 +21,7 @@ ssh_timeouts = {}
 def is_ssh_connected(chat_id):
     return chat_id in ssh_sessions and ssh_sessions[chat_id]['ssh'].get_transport().is_active()
 
-def connect_to_host(update: Update, context: CallbackContext, host_info, language):
+def connect_to_host(update: Update, context: CallbackContext, host_info):
     chat_id = update.effective_chat.id
     ssluser = host_info.get('ssluser') or host_info.get('username')
     password = host_info.get('password')
@@ -32,7 +33,7 @@ def connect_to_host(update: Update, context: CallbackContext, host_info, languag
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
     try:
-        update.message.reply_text(get_translation('connecting_to_host', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+        update.message.reply_text(get_translation('connecting_to_host').format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
         
         def connect():
             if secret_key_path:
@@ -52,15 +53,15 @@ def connect_to_host(update: Update, context: CallbackContext, host_info, languag
         try:
             shell = connect()
         except paramiko.AuthenticationException:
-            update.message.reply_text(get_translation('auth_failed', language))
+            update.message.reply_text(get_translation('auth_failed'))
             return
         except Exception:
-            update.message.reply_text(get_translation('connection_failed_retrying', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+            update.message.reply_text(get_translation('connection_failed_retrying').format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
             time.sleep(5)
             try:
                 shell = connect()
             except paramiko.AuthenticationException:
-                update.message.reply_text(get_translation('auth_failed', language))
+                update.message.reply_text(get_translation('auth_failed'))
                 return
             except Exception as e:
                 raise e
@@ -83,16 +84,15 @@ def connect_to_host(update: Update, context: CallbackContext, host_info, languag
             'shell': shell,
             'buffer': ''
         }
-        update.message.reply_text(get_translation('connected_to_host', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+        update.message.reply_text(get_translation('connected_to_host').format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
         
-        ssh_timeouts[chat_id] = threading.Timer(900, lambda: timeout_ssh_session(context.bot, chat_id, language))
+        ssh_timeouts[chat_id] = threading.Timer(300, lambda: timeout_ssh_session(context.bot, chat_id))
         ssh_timeouts[chat_id].start()
 
     except Exception as e:
-        update.message.reply_text(get_translation('connection_failed', language).format(error=str(e)))
+        update.message.reply_text(get_translation('connection_failed').format(error=str(e)))
 
 def handle_ssh_command(update: Update, context: CallbackContext) -> None:
-    language = context.bot_data.get('language', 'zh')
     chat_id = update.effective_chat.id
     
     if len(context.args) == 0:
@@ -104,8 +104,8 @@ def handle_ssh_command(update: Update, context: CallbackContext) -> None:
             sslhost = account.get('sslhost') or account.get('hostname')
             host_list.append(f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}")
         
-        message = get_translation('available_hosts', language).format(hosts="\n".join(host_list))
-        message += "\n\n" + get_translation('ssh_usage', language)
+        message = get_translation('available_hosts').format(hosts="\n".join(host_list))
+        message += "\n\n" + get_translation('ssh_usage')
         update.message.reply_text(message)
     elif len(context.args) == 1:
         host_identifier = context.args[0]
@@ -117,9 +117,9 @@ def handle_ssh_command(update: Update, context: CallbackContext) -> None:
         if account:
             # 连接预定义主机
             if chat_id in ssh_sessions:
-                update.message.reply_text(get_translation('active_ssh_session', language))
+                update.message.reply_text(get_translation('active_ssh_session'))
             else:
-                connect_to_host(update, context, account, language)
+                connect_to_host(update, context, account)
         else:
             # 处理自定义主机连接
             if '@' in host_identifier:
@@ -129,15 +129,14 @@ def handle_ssh_command(update: Update, context: CallbackContext) -> None:
                     'ssluser': ssluser,
                     'sslhost': sslhost
                 }
-                update.message.reply_text(get_translation('enter_password', language))
+                update.message.reply_text(get_translation('enter_password'))
             else:
-                update.message.reply_text(get_translation('invalid_host_format', language))
+                update.message.reply_text(get_translation('invalid_host_format'))
     else:
-        update.message.reply_text(get_translation('ssh_usage', language))
+        update.message.reply_text(get_translation('ssh_usage'))
 
 def handle_password_input(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
-    language = context.bot_data.get('language', 'zh')
     
     if 'awaiting_ssh_password' in context.user_data:
         password = update.message.text
@@ -148,10 +147,9 @@ def handle_password_input(update: Update, context: CallbackContext) -> None:
         # 删除密码消息
         update.message.delete()
         
-        connect_to_host(update, context, host_info, language)
+        connect_to_host(update, context, host_info)
 
 def handle_exit_command(update: Update, context: CallbackContext) -> None:
-    language = context.bot_data.get('language', 'zh')
     chat_id = update.effective_chat.id
     if chat_id in ssh_sessions:
         session = ssh_sessions[chat_id]
@@ -161,11 +159,17 @@ def handle_exit_command(update: Update, context: CallbackContext) -> None:
         if chat_id in ssh_timeouts:
             ssh_timeouts[chat_id].cancel()
             del ssh_timeouts[chat_id]
-        update.message.reply_text(get_translation('ssh_disconnected', language))
+        update.message.reply_text(get_translation('ssh_disconnected'))
     else:
-        update.message.reply_text(get_translation('no_active_ssh', language))
+        update.message.reply_text(get_translation('no_active_ssh'))
 
-def timeout_ssh_session(bot, chat_id, language):
+def start_ssh_timeout(bot, chat_id):
+    if chat_id in ssh_timeouts:
+        ssh_timeouts[chat_id].cancel()
+    ssh_timeouts[chat_id] = threading.Timer(300, lambda: timeout_ssh_session(bot, chat_id))
+    ssh_timeouts[chat_id].start()
+
+def timeout_ssh_session(bot, chat_id):
     if chat_id in ssh_sessions:
         session = ssh_sessions[chat_id]
         session['shell'].close()
@@ -173,10 +177,9 @@ def timeout_ssh_session(bot, chat_id, language):
         del ssh_sessions[chat_id]
         if chat_id in ssh_timeouts:
             del ssh_timeouts[chat_id]
-        bot.send_message(chat_id=chat_id, text=get_translation('ssh_session_timeout', language))
+        bot.send_message(chat_id=chat_id, text=get_translation('ssh_session_timeout'))
 
 def handle_ssh_command_execution(update: Update, context: CallbackContext) -> None:
-    language = context.bot_data.get('language', 'zh')
     chat_id = update.effective_chat.id
     if chat_id in ssh_sessions:
         command = update.message.text
@@ -219,18 +222,18 @@ def handle_ssh_command_execution(update: Update, context: CallbackContext) -> No
                 for chunk in chunks:
                     update.message.reply_text(chunk)
             else:
-                update.message.reply_text(get_translation('command_executed_no_output', language))
+                update.message.reply_text(get_translation('command_executed_no_output'))
             
             # 重置超时定时器
             if chat_id in ssh_timeouts:
                 ssh_timeouts[chat_id].cancel()
-            ssh_timeouts[chat_id] = threading.Timer(900, lambda: timeout_ssh_session(context.bot, chat_id, language))
+            ssh_timeouts[chat_id] = threading.Timer(300, lambda: timeout_ssh_session(context.bot, chat_id))
             ssh_timeouts[chat_id].start()
             
         except Exception as e:
-            update.message.reply_text(get_translation('command_execution_error', language).format(error=str(e)))
+            update.message.reply_text(get_translation('command_execution_error').format(error=str(e)))
     else:
-        update.message.reply_text(get_translation('no_active_connection', language))
+        update.message.reply_text(get_translation('no_active_connection'))
 
 def clean_ansi_escape_sequences(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')

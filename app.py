@@ -10,7 +10,7 @@ import time
 import requests
 import datetime
 import pytz
-from ssh import handle_ssh_command, handle_exit_command, is_ssh_connected, ssh_sessions, ssh_timeouts,handle_ssh_command_execution,handle_password_input
+from ssh import handle_ssh_command, handle_exit_command, is_ssh_connected, handle_ssh_command_execution, handle_password_input, start_ssh_timeout
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 from upload_keys import upload_public_keys
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-LANGUAGE = os.getenv('LANGUAGE', 'zh')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 ACCOUNTS_JSON = os.getenv('ACCOUNTS_JSON')
@@ -49,11 +48,11 @@ def get_beijing_time(dt=None):
     return dt.astimezone(beijing_tz)
 
 def generate_welcome_message():
-    return get_translation('welcome_message', LANGUAGE)
+    return get_translation('welcome_message')
 
 def create_feedback_keyboard():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton(get_translation('feedback_button', LANGUAGE), url=FEEDBACK_GROUP_LINK, callback_data="feedback")
+        InlineKeyboardButton(get_translation('feedback_button'), url=FEEDBACK_GROUP_LINK, callback_data="feedback")
     ]])
 
 def send_welcome_message_to_chat(bot):
@@ -66,14 +65,14 @@ def start_command(update: Update, context: CallbackContext) -> None:
         
 def execute_host_command(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) == TELEGRAM_CHAT_ID:
-        update.message.reply_text(get_translation('executing_command', LANGUAGE))
+        update.message.reply_text(get_translation('executing_command'))
         threading.Thread(target=execute_host, args=(context.bot,)).start()
     else:
-        update.message.reply_text(get_translation('no_permission', LANGUAGE))
+        update.message.reply_text(get_translation('no_permission'))
 
 def set_cron(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text(get_translation('no_permission', LANGUAGE))
+        update.message.reply_text(get_translation('no_permission'))
         return
 
     global AUTO_CONNECT_INTERVAL, next_execute_time, RESET_INTERVAL_VARIATION
@@ -81,38 +80,38 @@ def set_cron(update: Update, context: CallbackContext) -> None:
     if not context.args:
         # Display current settings
         interval = int(AUTO_CONNECT_INTERVAL)
-        message = get_translation('current_settings', LANGUAGE).format(interval=interval, variation=RESET_INTERVAL_VARIATION)
+        message = get_translation('current_settings').format(interval=interval, variation=RESET_INTERVAL_VARIATION)
         
         if next_execute_time:
             now = get_beijing_time()
             time_until_next_execute = next_execute_time - now
             
-            message += get_translation('next_execution_time', LANGUAGE).format(
+            message += get_translation('next_execution_time').format(
                 beijing_time=next_execute_time.strftime("%Y-%m-%d %H:%M:%S"),
                 utc_time=next_execute_time.astimezone(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
             )
-            
+
             if time_until_next_execute.total_seconds() > 0:
                 days, seconds = time_until_next_execute.days, time_until_next_execute.seconds
                 hours, remainder = divmod(seconds, 3600)
                 minutes, _ = divmod(remainder, 60)
-                message += get_translation('time_until_next_execution', LANGUAGE).format(days=days, hours=hours, minutes=minutes)
+                message += get_translation('time_until_next_execution').format(days=days, hours=hours, minutes=minutes)
             else:
-                message += get_translation('next_execution_passed', LANGUAGE)
+                message += get_translation('next_execution_passed')
         else:
-            message += get_translation('next_execution_not_set', LANGUAGE)
+            message += get_translation('next_execution_not_set')
         
         update.message.reply_text(message)
         return
 
     if not context.args[0].isdigit():
-        update.message.reply_text(get_translation('invalid_hours', LANGUAGE))
+        update.message.reply_text(get_translation('invalid_hours'))
         return
 
     interval = int(context.args[0])
 
     if RESET_INTERVAL_VARIATION >= interval * 60:
-        update.message.reply_text(get_translation('variation_too_large', LANGUAGE).format(variation=RESET_INTERVAL_VARIATION, interval=interval))
+        update.message.reply_text(get_translation('variation_too_large').format(variation=RESET_INTERVAL_VARIATION, interval=interval))
         return
 
     AUTO_CONNECT_INTERVAL = str(interval)
@@ -123,7 +122,7 @@ def set_cron(update: Update, context: CallbackContext) -> None:
     next_execute_time = calculate_next_execute_time(now, interval)
     scheduler.add_job(scheduled_execute_host, 'date', run_date=next_execute_time, args=[context.bot])
     update.message.reply_text(
-        get_translation('cron_set', LANGUAGE).format(
+        get_translation('cron_set').format(
             interval=interval,
             variation=RESET_INTERVAL_VARIATION,
             beijing_time=next_execute_time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -135,27 +134,27 @@ def set_cron(update: Update, context: CallbackContext) -> None:
 
 def set_vartime(update: Update, context: CallbackContext) -> None:
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text(get_translation('no_permission', LANGUAGE))
+        update.message.reply_text(get_translation('no_permission'))
         return
 
     global RESET_INTERVAL_VARIATION, AUTO_CONNECT_INTERVAL
 
     if not context.args:
-        update.message.reply_text(get_translation('current_variation', LANGUAGE).format(variation=RESET_INTERVAL_VARIATION))
+        update.message.reply_text(get_translation('current_variation').format(variation=RESET_INTERVAL_VARIATION))
         return
 
     if not context.args[0].isdigit():
-        update.message.reply_text(get_translation('invalid_minutes', LANGUAGE))
+        update.message.reply_text(get_translation('invalid_minutes'))
         return
 
     new_variation = int(context.args[0])
 
     if int(AUTO_CONNECT_INTERVAL) * 60 <= new_variation:
-        update.message.reply_text(get_translation('variation_too_large', LANGUAGE).format(variation=new_variation, interval=AUTO_CONNECT_INTERVAL))
+        update.message.reply_text(get_translation('variation_too_large').format(variation=new_variation, interval=AUTO_CONNECT_INTERVAL))
         return
 
     RESET_INTERVAL_VARIATION = new_variation
-    update.message.reply_text(get_translation('variation_set', LANGUAGE).format(variation=RESET_INTERVAL_VARIATION))
+    update.message.reply_text(get_translation('variation_set').format(variation=RESET_INTERVAL_VARIATION))
 
     now = get_beijing_time()
     global next_execute_time
@@ -163,7 +162,7 @@ def set_vartime(update: Update, context: CallbackContext) -> None:
     scheduler.remove_all_jobs()
     scheduler.add_job(scheduled_execute_host, 'date', run_date=next_execute_time, args=[context.bot])
     update.message.reply_text(
-        get_translation('next_execution_updated', LANGUAGE).format(
+        get_translation('next_execution_updated').format(
             interval=AUTO_CONNECT_INTERVAL,
             beijing_time=next_execute_time.strftime("%Y-%m-%d %H:%M:%S"),
             utc_time=next_execute_time.astimezone(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
@@ -173,36 +172,36 @@ def set_vartime(update: Update, context: CallbackContext) -> None:
 def set_command(update: Update, context: CallbackContext) -> None:
     global CUSTOM_COMMAND
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text(get_translation('no_permission', LANGUAGE))
+        update.message.reply_text(get_translation('no_permission'))
         return
 
     if not context.args:
-        update.message.reply_text(get_translation('custom_command', LANGUAGE).format(command=CUSTOM_COMMAND))
+        update.message.reply_text(get_translation('custom_command').format(command=CUSTOM_COMMAND))
         return
 
     CUSTOM_COMMAND = ' '.join(context.args)
-    update.message.reply_text(get_translation('custom_command_set', LANGUAGE).format(command=CUSTOM_COMMAND))
+    update.message.reply_text(get_translation('custom_command_set').format(command=CUSTOM_COMMAND))
 
 def set_path_command(update: Update, context: CallbackContext) -> None:
     global CUSTOM_PATH_COMMAND
     if str(update.message.chat_id) != TELEGRAM_CHAT_ID:
-        update.message.reply_text(get_translation('no_permission', LANGUAGE))
+        update.message.reply_text(get_translation('no_permission'))
         return
 
     if not context.args:
         if CUSTOM_PATH_COMMAND:
-            update.message.reply_text(get_translation('current_pathcom', LANGUAGE).format(command=CUSTOM_PATH_COMMAND))
+            update.message.reply_text(get_translation('current_pathcom').format(command=CUSTOM_PATH_COMMAND))
         else:
-            update.message.reply_text(get_translation('no_pathcom', LANGUAGE))
+            update.message.reply_text(get_translation('no_pathcom'))
     elif context.args[0].lower() == 'clear':
         if CUSTOM_PATH_COMMAND:
             CUSTOM_PATH_COMMAND = None
-            update.message.reply_text(get_translation('pathcom_cleared', LANGUAGE))
+            update.message.reply_text(get_translation('pathcom_cleared'))
         else:
-            update.message.reply_text(get_translation('no_pathcom_to_clear', LANGUAGE))
+            update.message.reply_text(get_translation('no_pathcom_to_clear'))
     else:
         CUSTOM_PATH_COMMAND = ' '.join(context.args)
-        update.message.reply_text(get_translation('pathcom_set', LANGUAGE).format(command=CUSTOM_PATH_COMMAND))
+        update.message.reply_text(get_translation('pathcom_set').format(command=CUSTOM_PATH_COMMAND))
         
 def handle_message(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
@@ -218,16 +217,13 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         handle_ssh_command_execution(update, context)
         
         # 重置 SSH 会话超时
-        if chat_id in ssh_timeouts:
-            ssh_timeouts[chat_id].cancel()
-        ssh_timeouts[chat_id] = threading.Timer(900, lambda: timeout_ssh_session(context.bot, chat_id, language))
-        ssh_timeouts[chat_id].start()
+        start_ssh_timeout(context.bot, chat_id)
         
         return
 
     # 处理普通消息
     if update.message.text.startswith('/'):
-        # 如果是命令，不做处理（假设其他地方已经注册了命令处理器）
+        # 如果是命令，不做处理
         return
     else:
         # 非命令文本消息，发送欢迎消息
@@ -239,19 +235,17 @@ def send_welcome_message(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
 def change_language(update: Update, context: CallbackContext) -> None:
-    global LANGUAGE
     if len(context.args) == 1:
         new_language = context.args[0].lower()
         if new_language in ['zh', 'en']:
-            LANGUAGE = new_language
-            language_manager.set_language(LANGUAGE)
-            update.message.reply_text(get_translation('language_changed', LANGUAGE).format(language=LANGUAGE))
+            language_manager.set_language(new_language)
+            update.message.reply_text(get_translation('language_changed').format(language=new_language))
         else:
-            update.message.reply_text(get_translation('language_not_supported', LANGUAGE))
+            update.message.reply_text(get_translation('language_not_supported'))
     else:
         current_language_name = "中文" if language_manager.get_language() == "zh" else "English"
-        update.message.reply_text(get_translation('current_language', LANGUAGE).format(language=current_language_name))
-        update.message.reply_text(get_translation('language_usage', LANGUAGE))
+        update.message.reply_text(get_translation('current_language').format(language=current_language_name))
+        update.message.reply_text(get_translation('language_usage'))
 
 def setup_bot():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
@@ -279,14 +273,14 @@ def execute_host(bot):
     global is_executing_host
     with host_execute_lock:
         if is_executing_host:
-            log_and_send(bot, get_translation('executing_command', LANGUAGE))
+            log_and_send(bot, get_translation('executing_command'))
             return
         is_executing_host = True
 
     try:
         host_execute_main(command=CUSTOM_COMMAND, global_path=CUSTOM_PATH_COMMAND)
     except Exception as e:
-        log_and_send(bot, get_translation('command_error', LANGUAGE).format(error=str(e)))
+        log_and_send(bot, get_translation('command_error').format(error=str(e)))
     finally:
         with host_execute_lock:
             is_executing_host = False
@@ -299,7 +293,7 @@ def calculate_next_execute_time(current_time, interval_hours):
 def scheduled_execute_host(bot):
     global next_execute_time
     current_time = get_beijing_time()
-    log_and_send(bot, get_translation('scheduled_execution_start', LANGUAGE).format(
+    log_and_send(bot, get_translation('scheduled_execution_start').format(
         beijing_time=current_time.strftime("%Y-%m-%d %H:%M:%S"),
         utc_time=current_time.astimezone(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
     ))
@@ -309,7 +303,7 @@ def scheduled_execute_host(bot):
     scheduler.remove_all_jobs()
     scheduler.add_job(scheduled_execute_host, 'date', run_date=next_execute_time, args=[bot])
     
-    log_and_send(bot, get_translation('scheduled_execution_complete', LANGUAGE).format(
+    log_and_send(bot, get_translation('scheduled_execution_complete').format(
         success_count=success_count,
         total_count=total_count,
         next_time=next_execute_time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -324,7 +318,7 @@ def webhook():
 
 @app.route('/')
 def home():
-    return get_translation('bot_running', LANGUAGE)
+    return get_translation('bot_running')
 
 def set_webhook():
     if not RENDER_APP_URL:
@@ -361,7 +355,7 @@ if __name__ == '__main__':
     if webhook_set:
         send_welcome_message_to_chat(bot_updater.bot)
     else:
-        logger.error(get_translation('webhook_setup_failed', LANGUAGE))
+        logger.error(get_translation('webhook_setup_failed'))
     
     interval = int(AUTO_CONNECT_INTERVAL)
     now = get_beijing_time()
