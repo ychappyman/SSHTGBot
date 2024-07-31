@@ -5,7 +5,6 @@ import os
 import paramiko
 import aiohttp
 import logging
-import traceback
 from translations import get_translation
 from language_manager import language_manager
 
@@ -21,7 +20,7 @@ DEFAULT_COMMAND = "source ~/.profile && pm2 resurrect"
 def format_to_iso(date):
     return date.strftime('%Y-%m-%d %H:%M:%S')
 
-async def execute_ssh_command(sslhost, ssluser, password, command, global_path, customhostname='', vps_path=None, secret_key_path=None):
+async def execute_ssh_command(sslhost, ssluser, password, command, customhostname='', secret_key_path=None):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
@@ -69,22 +68,13 @@ async def execute_ssh_command(sslhost, ssluser, password, command, global_path, 
             except asyncio.TimeoutError:
                 await send_telegram_message(get_translation('connection_failed', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
                 return None, None, "Connection Timeout", None
-        
-        if global_path:
-            if vps_path:  # 如果主机有自己的路径设置
-                cd_command = f"cd {vps_path} && "
-                full_command = cd_command + global_path
-            else:  # 如果主机没有自己的路径设置
-                full_command = command  # 使用普通的setcommand命令
-        else:
-            full_command = command
 
-        logger.info(f"Executing command: {full_command}")
+        logger.info(f"Executing command: {command}")
         command_start = asyncio.get_event_loop().time()
         
         async def execute_and_read():
             stdin, stdout, stderr = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: client.exec_command(full_command)
+                None, lambda: client.exec_command(command)
             )
             output = await asyncio.get_event_loop().run_in_executor(None, stdout.read)
             error = await asyncio.get_event_loop().run_in_executor(None, stderr.read)
@@ -98,27 +88,25 @@ async def execute_ssh_command(sslhost, ssluser, password, command, global_path, 
                 output, error = await asyncio.wait_for(execute_and_read(), timeout=110)
             except asyncio.TimeoutError:
                 await send_telegram_message(get_translation('command_execution_failed', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
-                return None, None, f"Command Execution Timeout: {full_command}", full_command
+                return None, None, f"Command Execution Timeout: {command}", command
         
         command_time = asyncio.get_event_loop().time() - command_start
         if command_time > 10:
             logger.info(f"Command execution took {command_time:.2f} seconds")
         
         if not error:
-            return client, output, None, full_command
-        return client, None, error, full_command
+            return client, output, None, command
+        return client, None, error, command
     except Exception as e:
-        logger.error(get_translation('host_operation_error', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}", error=str(e), traceback=traceback.format_exc()))
         return None, None, str(e), None
     finally:
         if client:
             client.close()
 
-async def process_account(account, send_messages, command, global_path):
+async def process_account(account, send_messages, command):
     ssluser = account.get('ssluser') or account.get('username')
     password = account.get('password')
     sslhost = account.get('sslhost') or account.get('hostname')
-    vps_path = account.get('path')
     customhostname = account.get('customhostname', '').lower()
     secret_key_path = account.get('secretkey')
     
@@ -129,21 +117,12 @@ async def process_account(account, send_messages, command, global_path):
     logger.info(get_translation('processing_account', language).format(account=customhostname or ssluser))
     
     try:
-        client, output, error, full_command = await asyncio.wait_for(
-            execute_ssh_command(sslhost, ssluser, password, command, global_path, customhostname, vps_path, secret_key_path),
+        client, output, error, executed_command = await asyncio.wait_for(
+            execute_ssh_command(sslhost, ssluser, password, command, customhostname, secret_key_path),
             timeout=180  # 总超时时间设置为180秒（3分钟）
         )
     except asyncio.TimeoutError:
         await send_telegram_message(get_translation('host_operation_timeout', language).format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
-        return False
-    except Exception as e:
-        error_message = get_translation('host_operation_error', language).format(
-            host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
-            error=str(e),
-            traceback=traceback.format_exc()
-        )
-        logger.error(error_message)
-        await send_telegram_message(error_message)
         return False
     
     if client:
@@ -159,7 +138,7 @@ async def process_account(account, send_messages, command, global_path):
         if not error:
             ssh_success_message = get_translation('host_command_success', language).format(
                 host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
-                command=full_command
+                command=executed_command
             )
             logger.info(ssh_success_message)
             if send_messages:
@@ -168,7 +147,7 @@ async def process_account(account, send_messages, command, global_path):
         else:
             ssh_error_message = get_translation('host_command_failed', language).format(
                 host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}",
-                command=full_command,
+                command=executed_command,
                 error=error
             )
             logger.error(ssh_error_message)
@@ -187,11 +166,12 @@ async def process_account(account, send_messages, command, global_path):
     
     return False
 
-async def main(accounts, send_messages=True, command=DEFAULT_COMMAND, global_path=None):
-    tasks = [process_account(account, send_messages, command, global_path) for account in accounts]
+async def main(accounts, send_messages=True, command=DEFAULT_COMMAND, target='all'):
+    target_accounts = get_target_accounts(accounts, target)
+    tasks = [process_account(account, send_messages, command) for account in target_accounts]
     results = await asyncio.gather(*tasks)
     success_count = sum(results)
-    total_count = len(accounts)
+    total_count = len(target_accounts)
     
     language = language_manager.get_language()
     completion_message = get_translation('all_hosts_complete', language).format(success_count=success_count, total_count=total_count)
@@ -219,15 +199,41 @@ async def send_telegram_message(message):
     except Exception as e:
         logger.error(f"发送消息到Telegram时发生错误: {str(e)}")
 
-def run_main(send_messages=True, command=DEFAULT_COMMAND, global_path=None):
+def get_target_accounts(accounts, target):
+    if target == 'all':
+        return accounts
+    
+    cron_tasks = json.loads(os.getenv('CRON_TASKS_JSON', '{}'))
+    host_groups = cron_tasks.get('host_groups', {})
+    
+    target_accounts = []
+    targets = target.split(',')
+    
+    for t in targets:
+        t = t.strip()
+        if t.startswith('group:'):
+            group_name = t[6:]
+            if group_name in host_groups:
+                group_hosts = host_groups[group_name]
+                target_accounts.extend([account for account in accounts if account.get('customhostname', '').lower() in group_hosts])
+        elif t.startswith('+') or t.startswith('-'):
+            n = int(t[1:])
+            target_accounts.extend(accounts[:n] if t.startswith('+') else accounts[-n:])
+        else:
+            target_accounts.extend([account for account in accounts if account.get('customhostname', '').lower() == t.lower() or
+                                    f"{account.get('ssluser', account.get('username'))}@{account.get('sslhost', account.get('hostname'))}".lower() == t.lower()])
+    
+    return list({account['customhostname']: account for account in target_accounts}.values())  # Remove duplicates
+
+async def run_main(send_messages=True, command=DEFAULT_COMMAND, target='all'):
     accounts_json = os.getenv('ACCOUNTS_JSON')
     if accounts_json:
         accounts = json.loads(accounts_json)
-        return asyncio.run(main(accounts, send_messages, command, global_path))
+        return await main(accounts, send_messages, command, target)
     else:
         language = language_manager.get_language()
         logger.error(get_translation('no_accounts_json', language))
         return 0, 0
 
 if __name__ == "__main__":
-    run_main()
+    asyncio.run(run_main())

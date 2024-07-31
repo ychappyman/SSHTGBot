@@ -3,8 +3,7 @@ import os
 import asyncio
 import paramiko
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-import threading
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import time
 import re
 from translations import get_translation
@@ -14,85 +13,108 @@ from language_manager import language_manager
 ACCOUNTS_JSON = os.getenv('ACCOUNTS_JSON')
 accounts = json.loads(ACCOUNTS_JSON) if ACCOUNTS_JSON else []
 
-# 存储 SSH 会话和超时定时器
+# 存储 SSH 会话和超时任务
 ssh_sessions = {}
 ssh_timeouts = {}
+is_command_running = {}
 
 def is_ssh_connected(chat_id):
     return chat_id in ssh_sessions and ssh_sessions[chat_id]['ssh'].get_transport().is_active()
 
-def connect_to_host(update: Update, context: CallbackContext, host_info):
+async def handle_ssh_output(shell, update, timeout=10):
+    output_buffer = ""
+    prompt_pattern = r'.*[$#]\s*$'  # 修改提示符模式以匹配更广泛的情况
+    
+    start_time = time.time()
+    command_output = []
+    prompt = None
+    last_sent_index = 0
+
+    while True:
+        current_time = time.time()
+        if shell.recv_ready():
+            chunk = shell.recv(4096).decode('utf-8', errors='ignore')
+            output_buffer += chunk
+            
+            lines = output_buffer.split('\n')
+            full_lines = lines[:-1]
+            output_buffer = lines[-1]
+            
+            for line in full_lines:
+                clean_line = clean_ansi_escape_sequences(line)
+                command_output.append(clean_line)
+            
+            last_line = clean_ansi_escape_sequences(output_buffer)
+            if re.match(prompt_pattern, last_line):
+                if command_output[last_sent_index:]:
+                    await update.message.reply_text('\n'.join(command_output[last_sent_index:]))
+                await update.message.reply_text(last_line)
+                prompt = last_line
+                break
+            
+            if current_time - start_time > 2:  # 每2秒输出一次
+                if command_output[last_sent_index:]:
+                    await update.message.reply_text('\n'.join(command_output[last_sent_index:]))
+                    last_sent_index = len(command_output)
+                start_time = current_time
+        else:
+            if current_time - start_time > timeout:
+                if command_output[last_sent_index:]:
+                    await update.message.reply_text('\n'.join(command_output[last_sent_index:]))
+                    last_sent_index = len(command_output)
+                start_time = current_time
+            await asyncio.sleep(0.1)
+
+    return prompt
+
+async def connect_to_host(update: Update, context: ContextTypes.DEFAULT_TYPE, host_info):
     chat_id = update.effective_chat.id
     ssluser = host_info.get('ssluser') or host_info.get('username')
     password = host_info.get('password')
     sslhost = host_info.get('sslhost') or host_info.get('hostname')
     customhostname = host_info.get('customhostname', '').lower()
     secret_key_path = host_info.get('secretkey')
-
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
     try:
-        update.message.reply_text(get_translation('connecting_to_host').format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
+        await update.message.reply_text(get_translation('connecting_to_host').format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
         
-        def connect():
-            if secret_key_path:
-                private_key = paramiko.RSAKey.from_private_key_file(secret_key_path)
-                ssh.connect(sslhost, username=ssluser, pkey=private_key,
-                            timeout=30, auth_timeout=20, banner_timeout=20)
-            elif password:
-                ssh.connect(sslhost, username=ssluser, password=password,
-                            timeout=30, auth_timeout=20, banner_timeout=20)
-            else:
-                # 尝试使用当前用户的默认私钥
-                ssh.connect(sslhost, username=ssluser,
-                            timeout=30, auth_timeout=20, banner_timeout=20)
-            
-            return ssh.invoke_shell()
-
+        if secret_key_path:
+            private_key = paramiko.RSAKey.from_private_key_file(secret_key_path)
+            await asyncio.get_event_loop().run_in_executor(None, lambda: ssh.connect(sslhost, username=ssluser, pkey=private_key, timeout=10, auth_timeout=10, banner_timeout=10))
+        elif password:
+            await asyncio.get_event_loop().run_in_executor(None, lambda: ssh.connect(sslhost, username=ssluser, password=password, timeout=10, auth_timeout=10, banner_timeout=10))
+        else:
+            await asyncio.get_event_loop().run_in_executor(None, lambda: ssh.connect(sslhost, username=ssluser, timeout=10, auth_timeout=10, banner_timeout=10))
+        
+        shell = ssh.invoke_shell()
+        
+        # 添加 50 秒超时逻辑
         try:
-            shell = connect()
-        except paramiko.AuthenticationException:
-            update.message.reply_text(get_translation('auth_failed'))
+            prompt = await asyncio.wait_for(handle_ssh_output(shell, update), timeout=50)
+        except asyncio.TimeoutError:
+            await update.message.reply_text(get_translation('SSH_CONNECTION_TIMEOUT'))
+            ssh.close()
             return
-        except Exception:
-            update.message.reply_text(get_translation('connection_failed_retrying').format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
-            time.sleep(5)
-            try:
-                shell = connect()
-            except paramiko.AuthenticationException:
-                update.message.reply_text(get_translation('auth_failed'))
-                return
-            except Exception as e:
-                raise e
-
-        # 执行初始化命令
-        init_commands = [
-            "source ~/.profile"
-        ]
-        for cmd in init_commands:
-            shell.send(cmd + '\n')
-            time.sleep(0.5)
-
-        # 清除初始化命令的输出
-        time.sleep(1)
-        while shell.recv_ready():
-            shell.recv(4096)
 
         ssh_sessions[chat_id] = {
             'ssh': ssh,
             'shell': shell,
-            'buffer': ''
+            'buffer': '',
+            'prompt': prompt
         }
-        update.message.reply_text(get_translation('connected_to_host').format(host=f"{customhostname + ': ' if customhostname else ''}{ssluser}@{sslhost}"))
         
-        ssh_timeouts[chat_id] = threading.Timer(300, lambda: timeout_ssh_session(context.bot, chat_id))
-        ssh_timeouts[chat_id].start()
-
+        # 启动 SSH 超时任务
+        ssh_timeouts[chat_id] = asyncio.create_task(timeout_ssh_session(context.bot, chat_id))
+    except paramiko.AuthenticationException:
+        await update.message.reply_text(get_translation('auth_failed'))
     except Exception as e:
-        update.message.reply_text(get_translation('connection_failed').format(error=str(e)))
+        error_message = str(e)
+        if not error_message:
+            error_message = "Unknown error occurred"
+        await update.message.reply_text(get_translation('connection_failed').format(error=error_message))
 
-def handle_ssh_command(update: Update, context: CallbackContext) -> None:
+async def handle_ssh_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     
     if len(context.args) == 0:
@@ -106,7 +128,7 @@ def handle_ssh_command(update: Update, context: CallbackContext) -> None:
         
         message = get_translation('available_hosts').format(hosts="\n".join(host_list))
         message += "\n\n" + get_translation('ssh_usage')
-        update.message.reply_text(message)
+        await update.message.reply_text(message)
     elif len(context.args) == 1:
         host_identifier = context.args[0]
         
@@ -117,9 +139,9 @@ def handle_ssh_command(update: Update, context: CallbackContext) -> None:
         if account:
             # 连接预定义主机
             if chat_id in ssh_sessions:
-                update.message.reply_text(get_translation('active_ssh_session'))
+                await update.message.reply_text(get_translation('active_ssh_session'))
             else:
-                connect_to_host(update, context, account)
+                await connect_to_host(update, context, account)
         else:
             # 处理自定义主机连接
             if '@' in host_identifier:
@@ -129,13 +151,13 @@ def handle_ssh_command(update: Update, context: CallbackContext) -> None:
                     'ssluser': ssluser,
                     'sslhost': sslhost
                 }
-                update.message.reply_text(get_translation('enter_password'))
+                await update.message.reply_text(get_translation('enter_password'))
             else:
-                update.message.reply_text(get_translation('invalid_host_format'))
+                await update.message.reply_text(get_translation('invalid_host_format'))
     else:
-        update.message.reply_text(get_translation('ssh_usage'))
+        await update.message.reply_text(get_translation('ssh_usage'))
 
-def handle_password_input(update: Update, context: CallbackContext) -> None:
+async def handle_password_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     
     if 'awaiting_ssh_password' in context.user_data:
@@ -145,31 +167,38 @@ def handle_password_input(update: Update, context: CallbackContext) -> None:
         del context.user_data['awaiting_ssh_password']
         
         # 删除密码消息
-        update.message.delete()
+        await update.message.delete()
         
-        connect_to_host(update, context, host_info)
+        await connect_to_host(update, context, host_info)
 
-def handle_exit_command(update: Update, context: CallbackContext) -> None:
+async def handle_exit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     if chat_id in ssh_sessions:
-        session = ssh_sessions[chat_id]
-        session['shell'].close()
-        session['ssh'].close()
+        if chat_id in is_command_running and is_command_running[chat_id]:
+            # 如果有命令正在执行，我们需要强制关闭连接
+            ssh_sessions[chat_id]['ssh'].close()
+            await update.message.reply_text(get_translation('ssh_force_disconnected'))
+        else:
+            ssh_sessions[chat_id]['shell'].close()
+            ssh_sessions[chat_id]['ssh'].close()
+            await update.message.reply_text(get_translation('ssh_disconnected'))
+        
         del ssh_sessions[chat_id]
         if chat_id in ssh_timeouts:
             ssh_timeouts[chat_id].cancel()
             del ssh_timeouts[chat_id]
-        update.message.reply_text(get_translation('ssh_disconnected'))
+        if chat_id in is_command_running:
+            del is_command_running[chat_id]
     else:
-        update.message.reply_text(get_translation('no_active_ssh'))
+        await update.message.reply_text(get_translation('no_active_ssh'))
 
-def start_ssh_timeout(bot, chat_id):
+async def start_ssh_timeout(bot, chat_id):
     if chat_id in ssh_timeouts:
         ssh_timeouts[chat_id].cancel()
-    ssh_timeouts[chat_id] = threading.Timer(300, lambda: timeout_ssh_session(bot, chat_id))
-    ssh_timeouts[chat_id].start()
+    ssh_timeouts[chat_id] = asyncio.create_task(timeout_ssh_session(bot, chat_id))
 
-def timeout_ssh_session(bot, chat_id):
+async def timeout_ssh_session(bot, chat_id):
+    await asyncio.sleep(900)  # 15 minutes timeout
     if chat_id in ssh_sessions:
         session = ssh_sessions[chat_id]
         session['shell'].close()
@@ -177,80 +206,68 @@ def timeout_ssh_session(bot, chat_id):
         del ssh_sessions[chat_id]
         if chat_id in ssh_timeouts:
             del ssh_timeouts[chat_id]
-        bot.send_message(chat_id=chat_id, text=get_translation('ssh_session_timeout'))
+        if chat_id in is_command_running:
+            del is_command_running[chat_id]
+        await bot.send_message(chat_id=chat_id, text=get_translation('ssh_session_timeout'))
 
-def handle_ssh_command_execution(update: Update, context: CallbackContext) -> None:
+async def handle_ssh_command_execution(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     if chat_id in ssh_sessions:
         command = update.message.text
         session = ssh_sessions[chat_id]
         shell = session['shell']
         
+        if command.lower() == '/exit':
+            await handle_exit_command(update, context)
+            return
+
         try:
+            is_command_running[chat_id] = True
+
+            # 清空之前的缓冲区
+            while shell.recv_ready():
+                shell.recv(4096)
+
             # 发送命令
             shell.send(command + '\n')
             
-            # 等待输出
-            time.sleep(1)  # 给命令更多执行时间
-            
-            # 读取输出
-            output = ""
-            while shell.recv_ready():
-                chunk = shell.recv(4096).decode('utf-8', errors='ignore')
-                output += chunk
-                if len(chunk) < 4096:
-                    time.sleep(0.1)  # 短暂等待，确保所有输出都被读取
-                    if not shell.recv_ready():
-                        break
+            # 使用 handle_ssh_output 处理所有命令
+            prompt = await handle_ssh_output(shell, update)
+            session['prompt'] = prompt
 
-            # 清理输出
-            output = clean_ansi_escape_sequences(output)
-            
-            # 分离命令、输出和提示符
-            lines = output.split('\n')
-            prompt_line = lines[-1] if lines else ""
-            output_lines = lines[1:-1] if len(lines) > 2 else []
-            
-            # 构建响应消息
-            response = f"$ {command}\n"
-            if output_lines:
-                response += "\n".join(output_lines) + "\n"
-            response += prompt_line
-            
-            if response.strip():
-                chunks = split_long_message(response.strip())
-                for chunk in chunks:
-                    update.message.reply_text(chunk)
-            else:
-                update.message.reply_text(get_translation('command_executed_no_output'))
-            
-            # 重置超时定时器
+            # 命令执行完毕后，再次清空缓冲区
+            while shell.recv_ready():
+                shell.recv(4096)
+
+            # 重置超时任务
             if chat_id in ssh_timeouts:
                 ssh_timeouts[chat_id].cancel()
-            ssh_timeouts[chat_id] = threading.Timer(300, lambda: timeout_ssh_session(context.bot, chat_id))
-            ssh_timeouts[chat_id].start()
+            ssh_timeouts[chat_id] = asyncio.create_task(timeout_ssh_session(context.bot, chat_id))
             
         except Exception as e:
-            update.message.reply_text(get_translation('command_execution_error').format(error=str(e)))
+            error_message = str(e)
+            if not error_message:
+                error_message = "Unknown error occurred"
+            await update.message.reply_text(get_translation('command_execution_error').format(error=error_message))
+        finally:
+            is_command_running[chat_id] = False
     else:
-        update.message.reply_text(get_translation('no_active_connection'))
+        await update.message.reply_text(get_translation('no_active_connection'))
 
 def clean_ansi_escape_sequences(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
 
-def split_long_message(message, max_length=4000):
-    return [message[i:i+max_length] for i in range(0, len(message), max_length)]
+async def main() -> None:
+    application = Application.builder().token(os.getenv('TELEGRAM_BOT_TOKEN')).build()
 
-def main() -> None:
-    updater = Updater(os.getenv('TELEGRAM_BOT_TOKEN'), use_context=True)
-    dp = updater.dispatcher
+    application.add_handler(CommandHandler("ssh", handle_ssh_command))
+    application.add_handler(CommandHandler("exit", handle_exit_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ssh_command_execution))
 
-    dp.add_handler(CommandHandler("ssh", handle_ssh_command))
-    dp.add_handler(CommandHandler("exit", handle_exit_command))
-
-    updater.start_polling()
-    updater.idle()
+    await application.initialize()
+    await application.start()
+    await application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
