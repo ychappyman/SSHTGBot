@@ -307,10 +307,9 @@ async def switch_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # 删除所有现有任务
     scheduler.remove_all_jobs()
     
-    # 重新加载所有任务，但不进行时间单位转换
-    tasks = load_tasks()
-    for task in tasks['tasks']:
-        await schedule_task(task)
+    # 重新加载所有任务
+    for task in current_tasks['tasks']:
+        job = await schedule_task(task)
         
         # 恢复任务的原始状态
         if not task_statuses.get(task['id'], True):
