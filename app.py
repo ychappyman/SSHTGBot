@@ -307,16 +307,10 @@ async def switch_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # 删除所有现有任务
     scheduler.remove_all_jobs()
     
-    # 重新加载所有任务，进行时间单位转换
-    for task in current_tasks['tasks']:
-        if TIME_MODE == "hour":
-            task['interval'] = max(1, task['interval'] // 60)  # 分钟转小时，最小为1小时
-            task['variation'] = min(59, task['variation'])  # 秒转分钟，最大为59分钟
-        else:
-            task['interval'] = task['interval'] * 60  # 小时转分钟
-            task['variation'] = task['variation'] * 60  # 分钟转秒
-
-        job = await schedule_task(task)
+    # 重新加载所有任务，但不进行时间单位转换
+    tasks = load_tasks()
+    for task in tasks['tasks']:
+        await schedule_task(task)
         
         # 恢复任务的原始状态
         if not task_statuses.get(task['id'], True):
