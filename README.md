@@ -64,6 +64,7 @@ SSHTGBot 是一个基于 Telegram 的自动化工具，主要用于远程管理�
      ]
      ```
    - `RENDER_APP_URL`: 必填，您的 Render 应用 URL（格式：https://*******.onrender.com，项目左上角，地址最后不要有/）
+   - `CONTROL_PANEL_PASSWORD`: 网页面板登录密码
    - `LAUNUAGE`: 可选，zh/en,默认语言为中文
    - `AUTO_CONNECT_INTERVAL`: 可选，定时任务的周期时间，选填，整数默认24，部署后可在telegram中输入/set_cron 0关闭定时任务。
    - `CUSTOM_COMMAND`: 可选，初始自定义执行命令（设置后，Render重新部署后不会清空自定义命令）
