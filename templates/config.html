@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-6">
+        <h1 class="text-3xl font-bold mb-6">Configuration Management</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">ACCOUNTS_JSON</h2>
+                <textarea id="accountsJson" rows="10" class="w-full p-2 border rounded"></textarea>
+            </div>
+            
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">CRON_TASKS_JSON</h2>
+                <textarea id="cronTasksJson" rows="10" class="w-full p-2 border rounded"></textarea>
+            </div>
+        </div>
+        
+        <div class="mt-6 flex space-x-4">
+            <button id="saveConfig" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                Save Configuration
+            </button>
+            <button id="downloadConfig" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                Download Configuration
+            </button>
+        </div>
+        
+        <div id="message" class="mt-4 text-center font-bold"></div>
+    </div>
+
+    <script>
+        const accountsJsonTextarea = document.getElementById('accountsJson');
+        const cronTasksJsonTextarea = document.getElementById('cronTasksJson');
+        const saveConfigButton = document.getElementById('saveConfig');
+        const downloadConfigButton = document.getElementById('downloadConfig');
+        const messageDiv = document.getElementById('message');
+
+        // 加载配置
+        fetch('/api/get_config')
+            .then(response => response.json())
+            .then(data => {
+                accountsJsonTextarea.value = JSON.stringify(data.ACCOUNTS_JSON, null, 2);
+                cronTasksJsonTextarea.value = JSON.stringify(data.CRON_TASKS_JSON, null, 2);
+            })
+            .catch(error => console.error('Error:', error));
+
+        // 保存配置
+        saveConfigButton.addEventListener('click', () => {
+            const config = {
+                ACCOUNTS_JSON: JSON.parse(accountsJsonTextarea.value),
+                CRON_TASKS_JSON: JSON.parse(cronTasksJsonTextarea.value)
+            };
+
+            fetch('/api/save_config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(config),
+            })
+            .then(response => response.json())
+            .then(data => {
+                messageDiv.textContent = data.message;
+                messageDiv.className = data.status === 'success' ? 'text-green-600' : 'text-red-600';
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                messageDiv.textContent = 'Error saving configuration';
+                messageDiv.className = 'text-red-600';
+            });
+        });
+
+        // 下载配置
+        downloadConfigButton.addEventListener('click', () => {
+            fetch('/api/download_config')
+                .then(response => response.json())
+                .then(data => {
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'config.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    messageDiv.textContent = 'Error downloading configuration';
+                    messageDiv.className = 'text-red-600';
+                });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hosts Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+        }
+        #sshTerminal {
+            background-color: #000;
+            color: #0f0;
+            font-family: monospace;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        #sshInput {
+            width: 100%;
+            background-color: #000;
+            color: #0f0;
+            font-family: monospace;
+            border: none;
+            outline: none;
+            padding: 5px;
+        }
+        #sshContainer {
+            display: none; /* 默认隐藏 */
+            flex-direction: column;
+            gap: 10px;
+        }
+        #sshInputContainer {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-6">
+        <h1 class="text-3xl font-bold mb-6">Hosts Management</h1>
+        
+        <div class="mb-4">
+            <button id="addHostBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                Add New Host
+            </button>
+        </div>
+        
+        <div id="hostsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- 动态添加主机卡片 -->
+        </div>
+
+        <div id="sshContainer" class="mt-4">
+            <div id="sshTerminal"></div>
+            <div id="sshInputContainer">
+                <input type="text" id="sshInput" placeholder="Enter command...">
+                <button id="sendCommand" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Host Modal -->
+    <div id="hostModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle" class="text-lg font-bold mb-4"></h3>
+            <form id="hostForm">
+                <input type="hidden" id="hostId">
+                <div class="mb-4">
+                    <label for="customhostname" class="block text-sm font-medium text-gray-700">Custom Hostname</label>
+                    <input type="text" id="customhostname" name="customhostname" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                    <input type="text" id="username" name="username" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="hostname" class="block text-sm font-medium text-gray-700">Hostname</label>
+                    <input type="text" id="hostname" name="hostname" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="port" class="block text-sm font-medium text-gray-700">Port</label>
+                    <input type="number" id="port" name="port" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="password" name="password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2">Save</button>
+                    <button type="button" onclick="closeModal()" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const hostsList = document.getElementById('hostsList');
+        const hostModal = document.getElementById('hostModal');
+        const hostForm = document.getElementById('hostForm');
+        const modalTitle = document.getElementById('modalTitle');
+        const addHostBtn = document.getElementById('addHostBtn');
+        const sshTerminal = document.getElementById('sshTerminal');
+        const sshInput = document.getElementById('sshInput');
+        const sendCommand = document.getElementById('sendCommand');
+        const sshContainer = document.getElementById('sshContainer');
+
+        let sshWebSocket = null;
+        let commandPending = false;
+
+        function cleanAnsiEscapeSequences(text) {
+            const ansiRegex = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+            return text.replace(ansiRegex, '');
+        }
+
+        function loadHosts() {
+            fetch('/api/get_hosts')
+                .then(response => response.json())
+                .then(hosts => {
+                    hostsList.innerHTML = hosts.map(host => `
+                        <div class="bg-white p-4 rounded shadow">
+                            <h3 class="font-bold">${host.customhostname}</h3>
+                            <p>Username: ${host.username}</p>
+                            <p>Hostname: ${host.hostname}</p>
+                            <p>Port: ${host.port}</p>
+                            <button onclick="editHost('${host.customhostname}')" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded mt-2">Edit</button>
+                            <button onclick="deleteHost('${host.customhostname}')" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded mt-2 ml-2">Delete</button>
+                            <button onclick="connectSSH('${host.customhostname}')" class="connect-ssh-btn bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded mt-2 ml-2" data-hostname="${host.customhostname}">Connect SSH</button>
+                        </div>
+                    `).join('');
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function connectSSH(customhostname) {
+            if (sshWebSocket) {
+                sshWebSocket.close();
+            }
+
+            sshTerminal.innerHTML = '';
+            sshContainer.style.display = 'flex'; // 显示SSH命令输出和输入界面
+
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/ssh/${customhostname}`;
+            sshWebSocket = new WebSocket(wsUrl);
+
+            sshWebSocket.onopen = function(event) {
+                appendToTerminal('Connected to SSH server...\n');
+            };
+
+            sshWebSocket.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.data) {
+                        const cleanedData = cleanAnsiEscapeSequences(data.data);
+                        const lines = cleanedData.split(/\r?\n/);
+                        let output = '';
+
+                        for (const line of lines) {
+                            if ((line.trim().endsWith('$') || line.trim().endsWith('#')) && commandPending) {
+                                commandPending = false;
+                            } else {
+                                output += line + '\n';
+                                if (line.trim().endsWith('$') || line.trim().endsWith('#')) {
+                                    commandPending = true;
+                                }
+                            }
+                        }
+
+                        appendToTerminal(output);
+                    }
+                } catch (e) {
+                    console.error('Error parsing WebSocket message:', e);
+                    appendToTerminal('Error parsing WebSocket message: ' + e.message + '\n');
+                }
+            };
+
+            sshWebSocket.onclose = function(event) {
+                appendToTerminal('Disconnected from SSH server.\n');
+            };
+
+            sshWebSocket.onerror = function(error) {
+                appendToTerminal('SSH WebSocket error: ' + (error.message || 'Unknown error') + '\n');
+            };
+        }
+
+        function appendToTerminal(text) {
+            sshTerminal.insertAdjacentHTML('beforeend', text);
+            sshTerminal.scrollTop = sshTerminal.scrollHeight;
+        }
+
+        sshInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                sendSSHCommand();
+                event.preventDefault();
+            }
+        });
+
+        sendCommand.addEventListener('click', sendSSHCommand);
+
+        function sendSSHCommand() {
+            if (sshWebSocket && sshWebSocket.readyState === WebSocket.OPEN) {
+                const command = sshInput.value.trim() + '\n';
+                if (command.trim().length > 0) {
+                    sshWebSocket.send(command);
+                    sshInput.value = '';
+                    commandPending = true;
+                }
+            } else {
+                appendToTerminal('SSH WebSocket connection is not open.\n');
+            }
+        }
+
+        function openModal(title, host = null) {
+            modalTitle.textContent = title;
+            if (host) {
+                document.getElementById('hostId').value = host.customhostname;
+                document.getElementById('customhostname').value = host.customhostname;
+                document.getElementById('username').value = host.username;
+                document.getElementById('hostname').value = host.hostname;
+                document.getElementById('port').value = host.port;
+                document.getElementById('password').value = host.password || '';
+            } else {
+                hostForm.reset();
+                document.getElementById('hostId').value = '';
+            }
+            hostModal.style.display = 'block';
+        }
+
+        function closeModal() {
+            hostModal.style.display = 'none';
+        }
+
+        addHostBtn.addEventListener('click', () => openModal('Add New Host'));
+
+        hostForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const hostData = {
+                customhostname: document.getElementById('customhostname').value,
+                username: document.getElementById('username').value,
+                hostname: document.getElementById('hostname').value,
+                port: parseInt(document.getElementById('port').value),
+                password: document.getElementById('password').value,
+            };
+            
+            const url = document.getElementById('hostId').value ? '/api/edit_host' : '/api/add_host';
+            fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(hostData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    closeModal();
+                    loadHosts();
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        function editHost(customhostname) {
+            fetch('/api/get_hosts')
+                .then(response => response.json())
+                .then(hosts => {
+                    const host = hosts.find(h => h.customhostname === customhostname);
+                    if (host) {
+                        openModal('Edit Host', host);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function deleteHost(customhostname) {
+            if (confirm('Are you sure you want to delete this host?')) {
+                fetch('/api/delete_host', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({customhostname})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        loadHosts();
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        }
+
+        window.onclick = function(event) {
+            if (event.target == hostModal) {
+                closeModal();
+            }
+        }
+
+        loadHosts();
+    </script>
+</body>
+</html>

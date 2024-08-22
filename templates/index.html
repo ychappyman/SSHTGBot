@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Bot Control Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+        }
+        #sshTerminal {
+            background-color: #000;
+            color: #0f0;
+            font-family: monospace;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        #sshInput {
+            width: 100%;
+            background-color: #000;
+            color: #0f0;
+            font-family: monospace;
+            border: none;
+            outline: none;
+            padding: 5px;
+        }
+        #sshContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #sshInputContainer {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-6">
+        <h1 class="text-3xl font-bold mb-6">Telegram Bot Control Panel</h1>
+
+        <div class="mb-6 flex space-x-4">
+            <a href="/config" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded">
+                Manage Configuration
+            </a>
+            <a href="/hosts" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded">
+                Manage Hosts
+            </a>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">Bot Control</h2>
+                <div class="flex space-x-4">
+                    <button id="startBot" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                        Start Bot
+                    </button>
+                    <button id="stopBot" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+                        Stop Bot
+                    </button>
+                </div>
+                <div class="mt-4">
+                    <p>Status: <span id="botStatus" class="font-semibold"></span></p>
+                </div>
+            </div>
+            
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-4">Command Execution</h2>
+                <button id="executeDefaultCommand" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                    Execute Default Command
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-6 bg-white p-6 rounded shadow">
+    <h2 class="text-xl font-semibold mb-4">Group Run Command</h2>
+    <div class="flex flex-col space-y-4">
+        <input type="text" id="groupRunCommand" placeholder="Enter command" class="border p-2 rounded">
+        <input type="text" id="groupRunTarget" placeholder="Enter target (e.g., all, +3, -2, host1,host2, group:groupname)" class="border p-2 rounded">
+        <button id="executeGroupRun" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+            Execute Group Run
+        </button>
+    </div>
+</div>
+        
+        <div class="mt-6 bg-white p-6 rounded shadow">
+            <h2 class="text-xl font-semibold mb-4">Tasks Management</h2>
+            <div class="flex space-x-4 mb-4">
+                <button id="getTasks" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded">
+                    Get Tasks
+                </button>
+                <button id="addTask" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
+                    Add Task
+                </button>
+            </div>
+            <div id="tasksList" class="mt-4"></div>
+        </div>
+        
+        <div class="mt-6 bg-white p-6 rounded shadow">
+            <h2 class="text-xl font-semibold mb-4">SSH Connection</h2>
+            <select id="hostSelect" class="mb-4 p-2 border rounded">
+                <option value="">Select a host</option>
+            </select>
+            <button id="connectSSH" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                Connect SSH
+            </button>
+            <div id="sshContainer" class="mt-4 hidden">
+                <div id="sshTerminal"></div>
+                <div id="sshInputContainer">
+                    <input type="text" id="sshInput" placeholder="Enter command...">
+                    <button id="sendCommand" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Send</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="output" class="mt-6 bg-white p-6 rounded shadow">
+            <h2 class="text-xl font-semibold mb-4">Output</h2>
+            <pre id="outputContent" class="bg-gray-100 p-4 rounded"></pre>
+        </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle" class="text-xl font-bold mb-4"></h2>
+            <form id="taskForm">
+                <input type="hidden" id="taskId">
+                <div class="mb-4">
+                    <label for="command" class="block text-sm font-medium text-gray-700">Command</label>
+                    <input type="text" id="command" name="command" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="interval" class="block text-sm font-medium text-gray-700">Interval (<span id="intervalUnit"></span>)</label>
+                    <input type="number" id="interval" name="interval" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="variation" class="block text-sm font-medium text-gray-700">Variation (<span id="variationUnit"></span>)</label>
+                    <input type="number" id="variation" name="variation" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="target" class="block text-sm font-medium text-gray-700">Target</label>
+                    <input type="text" id="target" name="target" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2">Save</button>
+                    <button type="button" onclick="closeModal()" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 清除 ANSI 转义序列的函数
+        function cleanAnsiEscapeSequences(text) {
+            const ansiRegex = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+            return text.replace(ansiRegex, '');
+        }
+
+        const outputContent = document.getElementById('outputContent');
+    const botStatus = document.getElementById('botStatus');
+    const tasksList = document.getElementById('tasksList');
+    const taskModal = document.getElementById('taskModal');
+    const taskForm = document.getElementById('taskForm');
+    const modalTitle = document.getElementById('modalTitle');
+    const hostSelect = document.getElementById('hostSelect');
+    const sshTerminal = document.getElementById('sshTerminal');
+    const sshInput = document.getElementById('sshInput');
+    const connectSSH = document.getElementById('connectSSH');
+    const sshContainer = document.getElementById('sshContainer');
+    const sendCommand = document.getElementById('sendCommand');
+    let currentTimeMode = 'hour';
+    let sshWebSocket = null;
+    let socket;
+    let isConnecting = false;
+
+    // 函数定义
+    function updateOutput(message) {
+    const now = new Date().toLocaleTimeString();
+    outputContent.innerHTML += `[${now}] ${message}\n`;
+    outputContent.scrollTop = outputContent.scrollHeight;
+}
+
+    function updateBotStatus() {
+        fetch('/api/bot_status')
+            .then(response => response.json())
+            .then(data => {
+                botStatus.textContent = data.status;
+                botStatus.className = data.status === 'active' ? 'text-green-600' : 'text-red-600';
+                document.getElementById('startBot').disabled = data.status === 'active';
+                document.getElementById('stopBot').disabled = data.status !== 'active';
+            })
+            .catch(error => updateOutput('Error: ' + error));
+    }
+
+    function startBot() {
+        fetch('/api/start_bot', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                updateOutput(data.message);
+                updateBotStatus();
+            })
+            .catch(error => updateOutput('Error: ' + error));
+    }
+
+    function stopBot() {
+        fetch('/api/stop_bot', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                updateOutput(data.message);
+                updateBotStatus();
+            })
+            .catch(error => updateOutput('Error: ' + error));
+    }
+
+    function clearOutput() {
+    const outputContent = document.getElementById('outputContent');
+    outputContent.textContent = '';
+}
+
+    async function executeGroupRun() {
+    try {
+        clearOutput();
+        const command = document.getElementById('groupRunCommand').value;
+        const target = document.getElementById('groupRunTarget').value || 'all';
+        
+        updateOutput('Starting group run command execution...');
+        const response = await fetch('/api/execute_group_run', { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ command, target })
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+        const data = await response.json();
+        if (data.status === 'success') {
+            console.log('Group run command execution completed successfully');
+            updateOutput(data.message);
+        } else {
+            updateOutput('Error: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        updateOutput('An error occurred while executing the group run command: ' + error.message);
+    }
+}
+
+    async function executeDefaultCommand() {
+    try {
+        clearOutput();
+        updateOutput('Starting default command execution...');
+        const response = await fetch('/api/execute_default_command', { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+        const data = await response.json();
+        if (data.status === 'success') {
+            // 不需要在这里更新输出，因为详细信息已经通过WebSocket发送
+            console.log('Command execution completed successfully');
+        } else {
+            updateOutput('Error: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        updateOutput('An error occurred while executing the command: ' + error.message);
+    }
+}
+
+    function getTasks() {
+        fetch('/api/get_tasks')
+            .then(response => response.json())
+            .then(data => {
+                updateTasksList(data.tasks, data.timeMode);
+            })
+            .catch(error => updateOutput('Error: ' + error));
+    }
+
+    function connectWebSocket() {
+        if (isConnecting) return;
+        isConnecting = true;
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        socket = new WebSocket(`${protocol}//${host}/ws/output`);
+
+        socket.onopen = function(event) {
+            console.log('WebSocket connection opened');
+            isConnecting = false;
+        };
+
+        socket.onmessage = function(event) {
+    try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'output') {
+            updateOutput(data.message);
+        }
+    } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+        updateOutput(event.data);  // 如果解析失败，直接显示原始消息
+    }
+};
+
+        socket.onclose = function(event) {
+            console.log('WebSocket connection closed');
+            isConnecting = false;
+            setTimeout(connectWebSocket, 5000);  // 5秒后尝试重新连接
+        };
+
+        socket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            isConnecting = false;
+        };
+    }
+        
+        function updateTasksList(tasks, timeMode) {
+            currentTimeMode = timeMode;
+            const intervalUnit = timeMode === 'hour' ? 'hours' : 'minutes';
+            const variationUnit = timeMode === 'hour' ? 'minutes' : 'seconds';
+            
+            tasksList.innerHTML = '<ul class="list-disc pl-5">' + 
+                tasks.map(task => `
+                    <li class="mb-4">
+                        Command: ${task.command}<br>
+                        Interval: ${task.interval} ${intervalUnit}<br>
+                        Variation: ±${task.variation} ${variationUnit}<br>
+                        Target: ${task.target}<br>
+                        ID: ${task.id}
+                        <button class="edit-task bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded ml-2" data-id="${task.id}">
+                            Edit
+                        </button>
+                        <button class="remove-task bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded ml-2" data-id="${task.id}">
+                            Remove
+                        </button>
+                    </li>`).join('') + 
+                '</ul>';
+            
+            document.querySelectorAll('.remove-task').forEach(button => {
+                button.addEventListener('click', function() {
+                    removeTask(this.getAttribute('data-id'));
+                });
+            });
+
+            document.querySelectorAll('.edit-task').forEach(button => {
+                button.addEventListener('click', function() {
+                    editTask(this.getAttribute('data-id'));
+                });
+            });
+        }
+
+        function removeTask(taskId) {
+            if (confirm(`Are you sure you want to remove task with ID ${taskId}?`)) {
+                fetch('/api/remove_task', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id: taskId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    updateOutput(data.message);
+                    if (data.status === 'success') {
+                        document.getElementById('getTasks').click();
+                    }
+                })
+                .catch(error => updateOutput('Error: ' + error));
+            }
+        }
+
+        function editTask(taskId) {
+            fetch('/api/get_tasks')
+                .then(response => response.json())
+                .then(data => {
+                    const task = data.tasks.find(t => t.id === taskId);
+                    if (task) {
+                        openModal('Edit Task', task);
+                    } else {
+                        updateOutput('Task not found');
+                    }
+                })
+                .catch(error => updateOutput('Error: ' + error));
+        }
+
+        document.getElementById('getTasks').addEventListener('click', () => {
+            fetch('/api/get_tasks')
+                .then(response => response.json())
+                .then(data => {
+                    updateTasksList(data.tasks, data.timeMode);
+                })
+                .catch(error => updateOutput('Error: ' + error));
+        });
+
+        document.getElementById('addTask').addEventListener('click', () => {
+            openModal('Add New Task');
+        });
+
+        function openModal(title, task = null) {
+            modalTitle.textContent = title;
+            document.getElementById('taskId').value = task ? task.id : '';
+            document.getElementById('command').value = task ? task.command : '';
+            document.getElementById('interval').value = task ? task.interval : '';
+            document.getElementById('variation').value = task ? task.variation : '';
+            document.getElementById('target').value = task ? task.target : '';
+            
+            const intervalUnit = currentTimeMode === 'hour' ? 'hours' : 'minutes';
+            const variationUnit = currentTimeMode === 'hour' ? 'minutes' : 'seconds';
+            document.getElementById('intervalUnit').textContent = intervalUnit;
+            document.getElementById('variationUnit').textContent = variationUnit;
+
+            taskModal.style.display = 'block';
+        }
+
+        function closeModal() {
+            taskModal.style.display = 'none';
+        }
+
+        taskForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const taskId = document.getElementById('taskId').value;
+            const taskData = {
+                command: document.getElementById('command').value,
+                interval: document.getElementById('interval').value,
+                variation: document.getElementById('variation').value,
+                target: document.getElementById('target').value || 'all'
+            };
+
+            if (taskId) {
+                taskData.id = taskId;
+                updateTask(taskData);
+            } else {
+                addTask(taskData);
+            }
+        });
+
+        function addTask(taskData) {
+            fetch('/api/add_task', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(taskData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateOutput(data.message);
+                if (data.status === 'success') {
+                    closeModal();
+                    document.getElementById('getTasks').click();
+                }
+            })
+            .catch(error => updateOutput('Error: ' + error));
+        }
+
+        function updateTask(taskData) {
+            fetch('/api/edit_task', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(taskData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateOutput(data.message);
+                if (data.status === 'success') {
+                    closeModal();
+                    document.getElementById('getTasks').click();
+                }
+            })
+            .catch(error => updateOutput('Error: ' + error));
+        }
+
+        // Load hosts for SSH connection
+        function loadHosts() {
+            fetch('/api/get_hosts')
+                .then(response => response.json())
+                .then(hosts => {
+                    hostSelect.innerHTML = '<option value="">Select a host</option>' +
+                        hosts.map(host => `<option value="${host.customhostname}">${host.customhostname}</option>`).join('');
+                })
+                .catch(error => updateOutput('Error loading hosts: ' + error));
+        }
+
+        connectSSH.addEventListener('click', () => {
+            const selectedHost = hostSelect.value;
+            if (!selectedHost) {
+                updateOutput('Please select a host');
+                return;
+            }
+
+            if (sshWebSocket) {
+                sshWebSocket.close();
+            }
+
+            sshTerminal.innerHTML = '';
+            sshContainer.classList.remove('hidden');
+
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/ssh/${selectedHost}`;
+            sshWebSocket = new WebSocket(wsUrl);
+
+            sshWebSocket.onopen = function(event) {
+                updateOutput('SSH WebSocket connection opened');
+            };
+
+            let lastPrompt = '';
+
+sshWebSocket.onmessage = function(event) {
+    try {
+        const data = JSON.parse(event.data);
+        if (data.data) {
+            const cleanedData = cleanAnsiEscapeSequences(data.data);
+            // 分行处理，保留空行，并去除重复的提示符
+            const lines = cleanedData.split(/\r?\n/).filter(line => {
+                if (line.trim().endsWith('$')) {
+                    if (line === lastPrompt) {
+                        return false; // 跳过重复的提示符
+                    }
+                    lastPrompt = line;
+                }
+                return true;
+            });
+            
+            const newOutput = lines.map(line => {
+                // 对于 ASCII 艺术，我们使用 <pre> 标签来保持格式
+                if (line.includes('____') || line.includes('/ ___')) {
+                    return `<pre>${line}</pre>`;
+                }
+                return `<div>${line || '&nbsp;'}</div>`;
+            }).join('');
+            
+            sshTerminal.insertAdjacentHTML('beforeend', newOutput);
+            sshTerminal.scrollTop = sshTerminal.scrollHeight;
+        }
+    } catch (e) {
+        console.error('Error parsing WebSocket message:', e);
+        // 错误处理保持不变
+    }
+};
+
+            sshWebSocket.onclose = function(event) {
+                updateOutput('SSH WebSocket connection closed');
+            };
+
+            sshWebSocket.onerror = function(error) {
+                console.error('WebSocket Error:', error);
+                updateOutput('SSH WebSocket error: ' + (error.message || 'Unknown error'));
+            };
+        });
+
+        // Send SSH commands
+        sshInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                sendSSHCommand();
+                event.preventDefault();
+            }
+        });
+
+        sendCommand.addEventListener('click', sendSSHCommand);
+
+        function sendSSHCommand() {
+            if (sshWebSocket && sshWebSocket.readyState === WebSocket.OPEN) {
+                const command = sshInput.value.trim() + '\n';
+                if (command.trim().length > 0) {
+                    sshWebSocket.send(command);
+                    sshInput.value = '';
+                }
+            } else {
+                updateOutput('SSH WebSocket connection is not open.');
+            }
+        }
+        
+        // DOM加载完成后执行初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化操作
+        updateBotStatus();
+        loadHosts();
+        connectWebSocket();
+
+        // 添加事件监听器
+        document.getElementById('startBot').addEventListener('click', startBot);
+        document.getElementById('stopBot').addEventListener('click', stopBot);
+        document.getElementById('executeDefaultCommand').addEventListener('click', executeDefaultCommand);
+        document.getElementById('getTasks').addEventListener('click', getTasks);
+        document.getElementById('addTask').addEventListener('click', () => openModal('Add New Task'));
+        document.getElementById('connectSSH').addEventListener('click', connectSSH);
+        document.getElementById('sendCommand').addEventListener('click', sendSSHCommand);
+        document.getElementById('executeGroupRun').addEventListener('click', executeGroupRun);
+
+        // 其他事件监听器...
+    });
+
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        if (event.target == taskModal) {
+            closeModal();
+        }
+    };
+    </script>
+</body>
+</html>
