@@ -26,6 +26,7 @@ from aiohttp import web, WSMsgType
 from aiohttp.web import middleware
 from aiohttp_cors import setup as setup_cors, ResourceOptions
 import paramiko
+import secrets
 
 # 忽略 cryptography 的弃用警告
 warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
@@ -53,8 +54,8 @@ CUSTOM_COMMAND = os.getenv('CUSTOM_COMMAND') or DEFAULT_COMMAND
 CRON_TASKS_JSON = os.getenv('CRON_TASKS_JSON')
 TIME_MODE = os.getenv('TIME_MODE', 'hour')  # 新增：默认为小时模式
 LANGUAGE = os.getenv('LANGUAGE', 'zh')
-# 设置登录密码（建议使用环境变量）
-LOGIN_PASSWORD = os.getenv('CONTROL_PANEL_PASSWORD', 'your_default_password')
+DEFAULT_PASSWORD = secrets.token_urlsafe(32)  # 生成一个随机的默认密码
+LOGIN_PASSWORD = os.getenv('CONTROL_PANEL_PASSWORD')
 
 host_execute_lock = asyncio.Lock()
 is_executing_host = False
@@ -1112,22 +1113,46 @@ def login_required(f):
         return await f(*args, **kwargs)
     return decorated_function
 
+@app.route('/health')
+async def health_check():
+    utc_time = datetime.datetime.now(pytz.UTC)
+    beijing_time = utc_time.astimezone(pytz.timezone('Asia/Shanghai'))
+    
+    utc_str = utc_time.strftime("%Y-%m-%d %H:%M:%S")
+    beijing_str = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
+    
+    return f"OK - Server is running. UTC time: {utc_str}, Beijing time: {beijing_str}", 200
+
 @app.route('/login', methods=['GET', 'POST'])
 async def login():
+    if not LOGIN_PASSWORD or LOGIN_PASSWORD == DEFAULT_PASSWORD:
+        return "Control panel access is not configured. Please set the CONTROL_PANEL_PASSWORD environment variable.", 403
+
     if request.method == 'POST':
         form = await request.form
         if form.get('password') == LOGIN_PASSWORD:
             response = redirect(url_for('home'))
-            response.set_cookie('authenticated', 'true')
+            # 在这里修改 set_cookie 的调用
+            response.set_cookie('authenticated', 'true', httponly=True, secure=True, samesite='Strict')
             return response
         else:
             return await render_template('login.html', error='Invalid password')
     return await render_template('login.html')
 
+@app.route('/logout')
+@login_required
+async def logout():
+    response = redirect(url_for('login'))
+    # 在这里添加 delete_cookie 的调用
+    response.delete_cookie('authenticated', httponly=True, secure=True, samesite='Strict')
+    return response
+
 @app.route('/')
 @login_required
 async def home():
-    return await render_template('index.html')
+    if not LOGIN_PASSWORD or LOGIN_PASSWORD == DEFAULT_PASSWORD:
+        return "Control panel access is not configured. Please set the CONTROL_PANEL_PASSWORD environment variable.", 403
+    return await render_template('index.html', authenticated=True)
 
 @app.route('/api/start_bot', methods=['POST'])
 async def start_bot():
@@ -1334,9 +1359,10 @@ async def add_host():
 @login_required
 async def edit_host():
     updated_host = await request.json
+    original_customhostname = updated_host.pop('originalCustomhostname', None)
     accounts = json.loads(os.environ.get('ACCOUNTS_JSON', '[]'))
     for i, host in enumerate(accounts):
-        if host['customhostname'] == updated_host['customhostname']:
+        if host['customhostname'] == original_customhostname:
             accounts[i] = updated_host
             break
     os.environ['ACCOUNTS_JSON'] = json.dumps(accounts)

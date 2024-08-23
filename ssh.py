@@ -135,8 +135,11 @@ async def handle_ssh_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         accounts = get_accounts()
 
         # 检查是否是预定义主机
-        account = next((acc for acc in accounts if acc.get('customhostname', '').lower() == host_identifier.lower() or 
-                        f"{acc.get('ssluser') or acc.get('username')}@{acc.get('sslhost') or acc.get('hostname')}".lower() == host_identifier.lower()), None)
+        account = next((acc for acc in accounts if 
+                        acc.get('customhostname', '').lower() == host_identifier.lower() or 
+                        f"{acc.get('ssluser') or acc.get('username')}@{acc.get('sslhost') or acc.get('hostname')}".lower() == host_identifier.lower() or
+                        f"{acc.get('ssluser') or acc.get('username')}@{acc.get('sslhost') or acc.get('hostname')}:{acc.get('port', 22)}".lower() == host_identifier.lower()
+                        ), None)
 
         if account:
             # 连接预定义主机
