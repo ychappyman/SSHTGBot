@@ -57,7 +57,10 @@
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto p-6">
-        <h1 class="text-3xl font-bold mb-6">SSH Control Panel</h1>
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">Hosts Management</h1>
+            <a href="/logout" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">Logout</a>
+        </div>
 
         <div class="mb-6 flex space-x-4">
             <a href="/config" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded">
@@ -93,15 +96,15 @@
         </div>
 
         <div class="mt-6 bg-white p-6 rounded shadow">
-    <h2 class="text-xl font-semibold mb-4">Group Run Command</h2>
-    <div class="flex flex-col space-y-4">
-        <input type="text" id="groupRunCommand" placeholder="Enter command" class="border p-2 rounded">
-        <input type="text" id="groupRunTarget" placeholder="Enter target (e.g., all, +3, -2, host1,host2, group:groupname)" class="border p-2 rounded">
-        <button id="executeGroupRun" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-            Execute Group Run
-        </button>
-    </div>
-</div>
+            <h2 class="text-xl font-semibold mb-4">Group Run Command</h2>
+            <div class="flex flex-col space-y-4">
+                <input type="text" id="groupRunCommand" placeholder="Enter command" class="border p-2 rounded">
+                <input type="text" id="groupRunTarget" placeholder="Enter target (e.g., all, +3, -2, host1,host2, group:groupname)" class="border p-2 rounded">
+                <button id="executeGroupRun" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                    Execute Group Run
+                </button>
+            </div>
+        </div>
         
         <div class="mt-6 bg-white p-6 rounded shadow">
             <h2 class="text-xl font-semibold mb-4">Tasks Management</h2>
@@ -176,7 +179,7 @@
             return text.replace(ansiRegex, '');
         }
 
-        const outputContent = document.getElementById('outputContent');
+    const outputContent = document.getElementById('outputContent');
     const botStatus = document.getElementById('botStatus');
     const tasksList = document.getElementById('tasksList');
     const taskModal = document.getElementById('taskModal');

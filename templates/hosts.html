@@ -57,7 +57,10 @@
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto p-6">
-        <h1 class="text-3xl font-bold mb-6">Hosts Management</h1>
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">Hosts Management</h1>
+            <a href="/logout" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">Logout</a>
+        </div>
         
         <div class="mb-4">
             <button id="addHostBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
@@ -89,16 +92,16 @@
                     <input type="text" id="customhostname" name="customhostname" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                 </div>
                 <div class="mb-4">
-                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
-                    <input type="text" id="username" name="username" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                </div>
-                <div class="mb-4">
                     <label for="hostname" class="block text-sm font-medium text-gray-700">Hostname</label>
                     <input type="text" id="hostname" name="hostname" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                 </div>
                 <div class="mb-4">
                     <label for="port" class="block text-sm font-medium text-gray-700">Port</label>
                     <input type="number" id="port" name="port" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                </div>
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                    <input type="text" id="username" name="username" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                 </div>
                 <div class="mb-4">
                     <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
@@ -138,9 +141,9 @@
                     hostsList.innerHTML = hosts.map(host => `
                         <div class="bg-white p-4 rounded shadow">
                             <h3 class="font-bold">${host.customhostname}</h3>
-                            <p>Username: ${host.username}</p>
                             <p>Hostname: ${host.hostname}</p>
                             <p>Port: ${host.port}</p>
+                            <p>Username: ${host.username}</p>
                             <button onclick="editHost('${host.customhostname}')" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded mt-2">Edit</button>
                             <button onclick="deleteHost('${host.customhostname}')" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded mt-2 ml-2">Delete</button>
                             <button onclick="connectSSH('${host.customhostname}')" class="connect-ssh-btn bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded mt-2 ml-2" data-hostname="${host.customhostname}">Connect SSH</button>
@@ -252,42 +255,51 @@
         addHostBtn.addEventListener('click', () => openModal('Add New Host'));
 
         hostForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const hostData = {
-                customhostname: document.getElementById('customhostname').value,
-                username: document.getElementById('username').value,
-                hostname: document.getElementById('hostname').value,
-                port: parseInt(document.getElementById('port').value),
-                password: document.getElementById('password').value,
-            };
-            
-            const url = document.getElementById('hostId').value ? '/api/edit_host' : '/api/add_host';
-            fetch(url, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(hostData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    closeModal();
-                    loadHosts();
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
+    e.preventDefault();
+    const hostData = {
+        customhostname: document.getElementById('customhostname').value,
+        username: document.getElementById('username').value,
+        hostname: document.getElementById('hostname').value,
+        port: parseInt(document.getElementById('port').value),
+        password: document.getElementById('password').value,
+    };
+    
+    const hostId = document.getElementById('hostId').value;
+    const url = hostId ? '/api/edit_host' : '/api/add_host';
+    
+    if (hostId) {
+        hostData.originalCustomhostname = hostId; // 添加原始 customhostname 用于后端识别
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(hostData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            closeModal();
+            loadHosts();
+        } else {
+            console.error('Operation failed:', data.message);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
 
         function editHost(customhostname) {
-            fetch('/api/get_hosts')
-                .then(response => response.json())
-                .then(hosts => {
-                    const host = hosts.find(h => h.customhostname === customhostname);
-                    if (host) {
-                        openModal('Edit Host', host);
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-        }
+    fetch('/api/get_hosts')
+        .then(response => response.json())
+        .then(hosts => {
+            const host = hosts.find(h => h.customhostname === customhostname);
+            if (host) {
+                openModal('Edit Host', host);
+                document.getElementById('hostId').value = host.customhostname; // 添加这行
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
 
         function deleteHost(customhostname) {
             if (confirm('Are you sure you want to delete this host?')) {
